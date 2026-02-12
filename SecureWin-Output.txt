@@ -1,0 +1,229 @@
+PS C:\Users\cyberrange\Downloads> .\SecureWin.ps1
+[2026-02-12 11:15:53] [INFO] ============================================================
+[2026-02-12 11:15:53] [CRITICAL] BLUE TEAM WINDOWS HARDENING SCRIPT - COMPETITION MODE
+[2026-02-12 11:15:53] [INFO] ============================================================
+[2026-02-12 11:15:53] [INFO] Script started at: 02/12/2026 11:15:53
+[2026-02-12 11:15:53] [INFO] Log file: C:\BlueTeam\Logs\Hardening-2026-02-12-111553.log
+[2026-02-12 11:15:53] [INFO]
+[2026-02-12 11:15:53] [INFO] ============================================================
+[2026-02-12 11:15:53] [CRITICAL] PHASE 1: USER ACCOUNT MANAGEMENT
+[2026-02-12 11:15:53] [INFO] ============================================================
+[2026-02-12 11:15:53] [INFO] Found 5 enabled local users
+[2026-02-12 11:15:53] [INFO] Protected user list: Administrator, DefaultAccount, Guest, WDAGUtilityAccount, cyberrange, blueteam, sysadmin, defender
+[2026-02-12 11:15:53] [INFO] Scanning for unauthorized users...
+[2026-02-12 11:15:53] [INFO] Keeping safe user: Administrator
+[2026-02-12 11:15:53] [INFO] Keeping safe user: blueteam
+[2026-02-12 11:15:53] [INFO] Keeping safe user: cyberrange
+[2026-02-12 11:15:53] [INFO] Keeping safe user: defender
+[2026-02-12 11:15:53] [INFO] Keeping safe user: sysadmin
+[2026-02-12 11:15:53] [INFO] No unauthorized users found
+[2026-02-12 11:15:53] [INFO]
+[2026-02-12 11:15:53] [INFO] Configuring authorized admin users...
+[2026-02-12 11:15:53] [INFO] Resetting password for existing user: blueteam
+[2026-02-12 11:15:53] [SUCCESS] Password reset for user: blueteam
+[2026-02-12 11:15:53] [INFO] User blueteam already in Administrators group
+[2026-02-12 11:15:53] [INFO] Resetting password for existing user: sysadmin
+[2026-02-12 11:15:53] [SUCCESS] Password reset for user: sysadmin
+[2026-02-12 11:15:53] [INFO] User sysadmin already in Administrators group
+[2026-02-12 11:15:53] [INFO] Resetting password for existing user: defender
+[2026-02-12 11:15:53] [SUCCESS] Password reset for user: defender
+[2026-02-12 11:15:53] [INFO] User defender already in Administrators group
+[2026-02-12 11:15:53] [INFO]
+[2026-02-12 11:15:53] [INFO] Disabling Guest account...
+[2026-02-12 11:15:53] [SUCCESS] Guest account disabled
+[2026-02-12 11:15:53] [INFO]
+[2026-02-12 11:15:53] [INFO] ============================================================
+[2026-02-12 11:15:53] [CRITICAL] PHASE 2: PASSWORD POLICY HARDENING
+[2026-02-12 11:15:53] [INFO] ============================================================
+[2026-02-12 11:15:53] [INFO] Setting password policies...
+[2026-02-12 11:15:54] [SUCCESS] Password policy configured successfully
+[2026-02-12 11:15:54] [INFO]   - Min length: 16
+[2026-02-12 11:15:54] [INFO]   - Max age: 90 days
+[2026-02-12 11:15:54] [INFO]   - Lockout threshold: 3 attempts
+[2026-02-12 11:15:54] [SUCCESS] Password complexity enabled
+[2026-02-12 11:15:54] [INFO]
+[2026-02-12 11:15:54] [INFO] ============================================================
+[2026-02-12 11:15:54] [CRITICAL] PHASE 3: FIREWALL HARDENING
+[2026-02-12 11:15:54] [INFO] ============================================================
+[2026-02-12 11:15:54] [INFO] Enabling Windows Firewall on all profiles...
+[2026-02-12 11:15:55] [SUCCESS] Firewall enabled on all profiles
+[2026-02-12 11:15:55] [INFO] Configuring firewall logging...
+[2026-02-12 11:15:55] [ERROR] Failed to configure firewall: Cannot process argument transformation on parameter 'LogAllowed'. Cannot convert value "True" to type "Microsoft.PowerShell.Cmdletization.GeneratedTypes.NetSecurity.GpoBoolean". Error: "Invalid cast from 'System.Boolean' to 'Microsoft.PowerShell.Cmdletization.GeneratedTypes.NetSecurity.GpoBoolean'."
+[2026-02-12 11:15:55] [INFO]
+[2026-02-12 11:15:55] [INFO] Removing potentially malicious inbound firewall rules...
+[2026-02-12 11:15:55] [SUCCESS] Removed 0 potentially malicious firewall rules
+[2026-02-12 11:15:55] [INFO]
+[2026-02-12 11:15:55] [INFO] Creating firewall rules for allowed ports...
+[2026-02-12 11:15:55] [SUCCESS] Created firewall rule for port 22
+[2026-02-12 11:15:56] [SUCCESS] Created firewall rule for port 80
+[2026-02-12 11:15:56] [SUCCESS] Created firewall rule for port 443
+[2026-02-12 11:15:56] [INFO]
+[2026-02-12 11:15:56] [INFO] Creating firewall rules for safe IP addresses...
+[2026-02-12 11:15:56] [SUCCESS] Created firewall rule for safe IP: 10.0.0.1
+[2026-02-12 11:15:56] [SUCCESS] Created firewall rule for safe IP: 192.168.1.100
+[2026-02-12 11:15:56] [SUCCESS] Created firewall rule for safe IP: 172.16.0.5
+[2026-02-12 11:15:57] [SUCCESS] Created firewall rule for safe IP range: 10.0.0.0/24
+[2026-02-12 11:15:57] [SUCCESS] Created firewall rule for safe IP range: 192.168.1.0/24
+[2026-02-12 11:15:57] [INFO]
+[2026-02-12 11:15:57] [INFO] ============================================================
+[2026-02-12 11:15:57] [CRITICAL] PHASE 4: SSH HARDENING
+[2026-02-12 11:15:57] [INFO] ============================================================
+[2026-02-12 11:16:00] [INFO] OpenSSH Server detected, applying hardening...
+[2026-02-12 11:16:00] [WARNING] SSH config file not found at: C:\ProgramData\ssh\sshd_config
+[2026-02-12 11:16:00] [SUCCESS] SSH directory permissions hardened
+[2026-02-12 11:16:00] [INFO]
+[2026-02-12 11:16:00] [INFO] ============================================================
+[2026-02-12 11:16:00] [CRITICAL] PHASE 5: NETWORK SECURITY
+[2026-02-12 11:16:00] [INFO] ============================================================
+[2026-02-12 11:16:00] [INFO] Disabling SMBv1 protocol...
+[2026-02-12 11:16:04] [SUCCESS] SMBv1 disabled successfully
+[2026-02-12 11:16:04] [INFO] Disabling LLMNR...
+[2026-02-12 11:16:04] [SUCCESS] LLMNR disabled
+[2026-02-12 11:16:04] [INFO] Disabling NetBIOS over TCP/IP...
+[2026-02-12 11:16:04] [SUCCESS] NetBIOS disabled on all adapters
+[2026-02-12 11:16:04] [INFO]
+[2026-02-12 11:16:04] [INFO] ============================================================
+[2026-02-12 11:16:04] [CRITICAL] PHASE 6: BACKDOOR DETECTION AND REMOVAL
+[2026-02-12 11:16:04] [INFO] ============================================================
+[2026-02-12 11:16:04] [INFO] Scanning for suspicious scheduled tasks...
+[2026-02-12 11:17:05] [CRITICAL] SUSPICIOUS TASK FOUND: Firefox Background Update S-1-5-21-2312542044-3363542522-1393235797-1000 308046B0AF4A39CB - Reason: Non-standard task path
+[2026-02-12 11:17:05] [WARNING]   Path: \Mozilla\
+[2026-02-12 11:17:05] [WARNING]   Action: C:\Program Files\Mozilla Firefox\firefox.exe --MOZ_LOG sync,prependheader,timestamp,append,maxsize:1,Dump:5 --MOZ_LOG_FILE C:\ProgramData\Mozilla-1de4eec8-1241-4177-a864-e594e8d1fb38\updates\308046B0AF4A39CB\backgroundupdate.moz_log --backgroundtask backgroundupdate
+[2026-02-12 11:17:05] [CRITICAL] SUSPICIOUS TASK FOUND: Firefox Default Browser Agent 308046B0AF4A39CB - Reason: Non-standard task path
+[2026-02-12 11:17:05] [WARNING]   Path: \Mozilla\
+[2026-02-12 11:17:05] [WARNING]   Action: C:\Program Files\Mozilla Firefox\default-browser-agent.exe do-task "308046B0AF4A39CB"
+[2026-02-12 11:17:05] [WARNING] Found 2 suspicious scheduled tasks
+[2026-02-12 11:17:05] [INFO]
+[2026-02-12 11:17:05] [INFO] Scanning startup locations for persistence...
+[2026-02-12 11:17:05] [WARNING] Startup entry in HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run : AzureArcSetup = C:\WINDOWS\AzureArcSetup\Systray\AzureArcSysTray.exe
+[2026-02-12 11:17:05] [WARNING] Startup entry in HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run : SecurityHealth = C:\WINDOWS\system32\SecurityHealthSystray.exe
+[2026-02-12 11:17:05] [INFO]
+[2026-02-12 11:17:05] [INFO] Scanning for suspicious services...
+[2026-02-12 11:17:16] [INFO]
+[2026-02-12 11:17:16] [INFO] ============================================================
+[2026-02-12 11:17:16] [CRITICAL] PHASE 7: SYSTEM HARDENING
+[2026-02-12 11:17:16] [INFO] ============================================================
+[2026-02-12 11:17:16] [INFO] Disabling AutoRun/AutoPlay...
+Set-ItemProperty : Cannot find path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+because it does not exist.
+At C:\Users\cyberrange\Downloads\SecureWin.ps1:763 char:5
++     Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentV ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (HKCU:\SOFTWARE\...licies\Explorer:String) [Set-ItemProperty],
+    ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.SetItemPropertyCommand
+
+[2026-02-12 11:17:16] [SUCCESS] AutoRun disabled
+[2026-02-12 11:17:16] [INFO] Enabling User Account Control (UAC)...
+[2026-02-12 11:17:16] [SUCCESS] UAC enabled with secure desktop prompt
+[2026-02-12 11:17:16] [INFO] Disabling PowerShell v2...
+[2026-02-12 11:17:17] [ERROR] Failed to disable PowerShell v2: Feature name MicrosoftWindowsPowerShellV2Root is unknown.
+
+[2026-02-12 11:17:17] [INFO] Configuring Windows Defender...
+[2026-02-12 11:17:50] [SUCCESS] Windows Defender enabled and updated
+[2026-02-12 11:17:50] [INFO] Restricting anonymous access...
+[2026-02-12 11:17:50] [SUCCESS] Anonymous access restricted
+[2026-02-12 11:17:50] [INFO] Enabling Data Execution Prevention (DEP)...
+[2026-02-12 11:17:50] [SUCCESS] DEP enabled for all processes
+[2026-02-12 11:17:50] [INFO] Disabling Windows Script Host...
+[2026-02-12 11:17:50] [SUCCESS] Windows Script Host disabled
+[2026-02-12 11:17:50] [INFO]
+[2026-02-12 11:17:50] [INFO] ============================================================
+[2026-02-12 11:17:50] [CRITICAL] PHASE 8: AUDIT LOGGING CONFIGURATION
+[2026-02-12 11:17:50] [INFO] ============================================================
+[2026-02-12 11:17:50] [INFO] Configuring Security event log...
+[2026-02-12 11:17:50] [SUCCESS] Security event log configured
+[2026-02-12 11:17:50] [INFO] Enabling advanced audit policies...
+[2026-02-12 11:17:50] [INFO]   Enabled auditing for: Account Logon
+[2026-02-12 11:17:50] [INFO]   Enabled auditing for: Account Management
+[2026-02-12 11:17:50] [INFO]   Enabled auditing for: Detailed Tracking
+[2026-02-12 11:17:50] [INFO]   Enabled auditing for: Logon/Logoff
+[2026-02-12 11:17:50] [INFO]   Enabled auditing for: Object Access
+[2026-02-12 11:17:50] [INFO]   Enabled auditing for: Policy Change
+[2026-02-12 11:17:50] [INFO]   Enabled auditing for: Privilege Use
+[2026-02-12 11:17:50] [INFO]   Enabled auditing for: System
+[2026-02-12 11:17:51] [SUCCESS] Advanced audit policies enabled
+[2026-02-12 11:17:51] [INFO] Enabling command line logging...
+[2026-02-12 11:17:51] [SUCCESS] Command line logging enabled
+[2026-02-12 11:17:51] [INFO] Enabling PowerShell logging...
+[2026-02-12 11:17:51] [SUCCESS] PowerShell logging enabled
+[2026-02-12 11:17:51] [INFO]
+[2026-02-12 11:17:51] [INFO] ============================================================
+[2026-02-12 11:17:51] [CRITICAL] GENERATING FINAL REPORT
+[2026-02-12 11:17:51] [INFO] ============================================================
+[2026-02-12 11:17:51] [INFO]
+[2026-02-12 11:17:51] [INFO] EXECUTION SUMMARY:
+[2026-02-12 11:17:51] [INFO]   Start time: 02/12/2026 11:15:53
+[2026-02-12 11:17:51] [INFO]   End time: 02/12/2026 11:17:51
+[2026-02-12 11:17:51] [INFO]   Duration: 117.8029483 seconds
+[2026-02-12 11:17:51] [INFO]   Total changes applied: 26
+[2026-02-12 11:17:51] [INFO]   Users removed: 0
+[2026-02-12 11:17:51] [INFO]   Security issues found: 4
+[2026-02-12 11:17:51] [INFO]
+[2026-02-12 11:17:51] [INFO] CHANGES BY CATEGORY:
+[2026-02-12 11:17:51] [INFO]   Firewall: 9 changes
+[2026-02-12 11:17:51] [INFO]   System Security: 6 changes
+[2026-02-12 11:17:51] [INFO]   Auditing: 4 changes
+[2026-02-12 11:17:51] [INFO]   Password Policy: 3 changes
+[2026-02-12 11:17:51] [INFO]   Network Security: 3 changes
+[2026-02-12 11:17:51] [INFO]   User Management: 1 changes
+[2026-02-12 11:17:51] [INFO]
+[2026-02-12 11:17:51] [CRITICAL] SECURITY ISSUES DETECTED:
+[2026-02-12 11:17:51] [CRITICAL]   ! SUSPICIOUS TASK FOUND: Firefox Background Update S-1-5-21-2312542044-3363542522-1393235797-1000 308046B0AF4A39CB - Reason: Non-standard task path
+[2026-02-12 11:17:51] [CRITICAL]   ! SUSPICIOUS TASK FOUND: Firefox Default Browser Agent 308046B0AF4A39CB - Reason: Non-standard task path
+[2026-02-12 11:17:51] [CRITICAL]   ! Startup entry in HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run : AzureArcSetup = C:\WINDOWS\AzureArcSetup\Systray\AzureArcSysTray.exe
+[2026-02-12 11:17:51] [CRITICAL]   ! Startup entry in HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run : SecurityHealth = C:\WINDOWS\system32\SecurityHealthSystray.exe
+[2026-02-12 11:17:51] [INFO]
+[2026-02-12 11:17:51] [INFO] AUTHORIZED ADMIN USERS:
+[2026-02-12 11:17:51] [INFO]   - blueteam
+[2026-02-12 11:17:51] [INFO]   - sysadmin
+[2026-02-12 11:17:51] [INFO]   - defender
+[2026-02-12 11:17:51] [INFO]
+[2026-02-12 11:17:51] [INFO] WHITELISTED IP ADDRESSES:
+[2026-02-12 11:17:51] [INFO]   - 10.0.0.1
+[2026-02-12 11:17:51] [INFO]   - 192.168.1.100
+[2026-02-12 11:17:51] [INFO]   - 172.16.0.5
+[2026-02-12 11:17:51] [INFO]   - 10.0.0.0/24 (range)
+[2026-02-12 11:17:51] [INFO]   - 192.168.1.0/24 (range)
+[2026-02-12 11:17:51] [INFO]
+[2026-02-12 11:17:51] [INFO] ============================================================
+[2026-02-12 11:17:51] [CRITICAL] BLUE TEAM RECOMMENDATIONS:
+[2026-02-12 11:17:51] [INFO] ============================================================
+[2026-02-12 11:17:51] [WARNING] 1. RESTART the system to apply all changes
+[2026-02-12 11:17:51] [WARNING] 2. REVIEW the log file for any errors: C:\BlueTeam\Logs\Hardening-2026-02-12-111553.log
+[2026-02-12 11:17:51] [WARNING] 3. MONITOR the Security event log for suspicious activity
+[2026-02-12 11:17:51] [WARNING] 4. VERIFY all authorized users can still access the system
+[2026-02-12 11:17:51] [WARNING] 5. TEST network connectivity to scoring infrastructure
+[2026-02-12 11:17:51] [WARNING] 6. CHECK firewall rules are not blocking competition traffic
+[2026-02-12 11:17:51] [WARNING] 7. REVIEW and REMOVE any suspicious tasks/services manually
+[2026-02-12 11:17:51] [WARNING] 8. ENABLE additional monitoring tools if available
+[2026-02-12 11:17:51] [WARNING] 9. DOCUMENT any Red Team persistence mechanisms found
+[2026-02-12 11:17:51] [WARNING] 10. KEEP this script running periodically to maintain posture
+[2026-02-12 11:17:51] [INFO]
+[2026-02-12 11:17:51] [INFO] ============================================================
+[2026-02-12 11:17:51] [SUCCESS] HARDENING COMPLETE - SYSTEM READY FOR COMPETITION
+[2026-02-12 11:17:51] [INFO] ============================================================
+
+================================================================================
+                    BLUE TEAM HARDENING COMPLETE
+================================================================================
+
+Log File: C:\BlueTeam\Logs\Hardening-2026-02-12-111553.log
+Changes Applied: 26
+Users Removed: 0
+Security Issues: 4
+
+================================================================================
+
+[2026-02-12 11:17:51] [CRITICAL] Initiating system restart to apply all changes...
+
+System will restart to apply all changes in 10 seconds...
+System will restart to apply all changes in 9 seconds...
+System will restart to apply all changes in 8 seconds...
+System will restart to apply all changes in 7 seconds...
+System will restart to apply all changes in 6 seconds...
+System will restart to apply all changes in 5 seconds...
+System will restart to apply all changes in 4 seconds...
+System will restart to apply all changes in 3 seconds...
+System will restart to apply all changes in 2 seconds...
+System will restart to apply all changes in 1 seconds...
