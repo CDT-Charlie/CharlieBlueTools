@@ -3,17 +3,18 @@
 .SYNOPSIS
     Blue Team Windows Hardening Script for Cyber Competitions
 .DESCRIPTION
-    Hardening script designed for Blue vs Red team competitions.
+    Comprehensive hardening script designed for Blue vs Red team competitions.
     Removes unauthorized users, hardens SSH, configures firewall, and locks down the system
     while preserving competition infrastructure through whitelisting.
 .NOTES
-    Author: Claude made this with Christian's prompts.
+    Author: Blue Team Security Script
     Version: 2.0
     Requires: PowerShell 5.1+ and Administrator privileges
+    Competition Ready: Yes
 #>
 
 # ============================================================================
-# CRITICAL COMPETITION VARIABLES - CONFIGURE FOR WHITELISTING
+# CRITICAL COMPETITION VARIABLES - CONFIGURE THESE FIRST!
 # ============================================================================
 
 # USER MANAGEMENT
@@ -326,7 +327,11 @@ try {
             New-Item -ItemType Directory -Path $logPath -Force | Out-Null
         }
         
-        Set-NetFirewallProfile -Profile Domain,Public,Private -LogAllowed $LogAllowedConnections -LogBlocked $LogDroppedPackets -LogFileName "$logPath\pfirewall.log" -LogMaxSizeKilobytes 32767
+        # Convert boolean to GpoBoolean type
+        $logAllowed = if ($LogAllowedConnections) { "True" } else { "False" }
+        $logBlocked = if ($LogDroppedPackets) { "True" } else { "False" }
+        
+        Set-NetFirewallProfile -Profile Domain,Public,Private -LogAllowed $logAllowed -LogBlocked $logBlocked -LogFileName "$logPath\pfirewall.log" -LogMaxSizeKilobytes 32767
         Write-BlueTeamLog "Firewall logging configured" "SUCCESS"
     }
     
@@ -449,18 +454,33 @@ if ($EnableSSHHardening) {
     if ($sshServerFeature.State -eq "Installed") {
         Write-BlueTeamLog "OpenSSH Server detected, applying hardening..." "INFO"
         
+        # Ensure SSH service is started (creates config if needed)
+        try {
+            Start-Service sshd -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+        } catch {
+            Write-BlueTeamLog "SSH service start skipped: $_" "INFO"
+        }
+        
         # Configure sshd_config
         $sshdConfigPath = "C:\ProgramData\ssh\sshd_config"
         
-        if (Test-Path $sshdConfigPath) {
-            try {
-                # Backup original config
+        # Create config directory if it doesn't exist
+        $sshDir = "C:\ProgramData\ssh"
+        if (-not (Test-Path $sshDir)) {
+            New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+            Write-BlueTeamLog "Created SSH directory: $sshDir" "INFO"
+        }
+        
+        try {
+            # Backup original config if it exists
+            if (Test-Path $sshdConfigPath) {
                 $backupPath = "$sshdConfigPath.backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
                 Copy-Item $sshdConfigPath $backupPath
                 Write-BlueTeamLog "Backed up SSH config to: $backupPath" "INFO"
-                
-                # Read current config
-                $sshdConfig = Get-Content $sshdConfigPath
+            } else {
+                Write-BlueTeamLog "Creating new SSH config file" "INFO"
+            }
                 
                 # Create hardened config
                 $hardenedConfig = @"
@@ -532,9 +552,6 @@ Subsystem       sftp    sftp-server.exe
             } catch {
                 Write-BlueTeamLog "Failed to harden SSH configuration: $_" "ERROR"
             }
-        } else {
-            Write-BlueTeamLog "SSH config file not found at: $sshdConfigPath" "WARNING"
-        }
         
         # Set proper permissions on SSH directory
         try {
@@ -635,6 +652,21 @@ if ($ScanForBackdoors) {
     if ($RemoveSuspiciousScheduledTasks) {
         Write-BlueTeamLog "Scanning for suspicious scheduled tasks..." "INFO"
         
+        # Whitelist of legitimate software task paths
+        $legitimateTaskPaths = @(
+            "\Microsoft\",
+            "\Mozilla\",
+            "\GoogleUpdateTask",
+            "\Adobe\",
+            "\Apple\",
+            "\CCleanerSkipUAC",
+            "\Opera\",
+            "\Avast\",
+            "\AVG\",
+            "\McAfee\",
+            "\Symantec\"
+        )
+        
         $allTasks = Get-ScheduledTask | Where-Object { $_.State -ne "Disabled" }
         $suspiciousCount = 0
         
@@ -643,8 +675,17 @@ if ($ScanForBackdoors) {
             $suspicious = $false
             $reason = ""
             
-            # Check task path (tasks not in Microsoft paths are suspicious)
-            if ($task.TaskPath -notlike "\Microsoft\*" -and $task.TaskPath -ne "\") {
+            # Check if task path is in legitimate list
+            $isLegitimate = $false
+            foreach ($legitPath in $legitimateTaskPaths) {
+                if ($task.TaskPath -like "*$legitPath*") {
+                    $isLegitimate = $true
+                    break
+                }
+            }
+            
+            # Check task path (tasks not in Microsoft or known legitimate paths are suspicious)
+            if (-not $isLegitimate -and $task.TaskPath -ne "\") {
                 $suspicious = $true
                 $reason = "Non-standard task path"
             }
@@ -687,6 +728,22 @@ if ($ScanForBackdoors) {
         Write-BlueTeamLog "" "INFO"
         Write-BlueTeamLog "Scanning startup locations for persistence..." "INFO"
         
+        # Whitelist of legitimate startup entries
+        $legitimateStartupEntries = @(
+            "SecurityHealth",
+            "OneDrive",
+            "Teams",
+            "WindowsDefender",
+            "AzureArcSetup",
+            "VMware",
+            "VBoxTray",
+            "NvBackend",
+            "RtkAudioManager",
+            "Intel",
+            "AMD",
+            "NVIDIA"
+        )
+        
         $startupLocations = @(
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run",
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce",
@@ -702,7 +759,21 @@ if ($ScanForBackdoors) {
                     $items = Get-ItemProperty -Path $location -ErrorAction SilentlyContinue
                     if ($items) {
                         $items.PSObject.Properties | Where-Object { $_.Name -notlike "PS*" } | ForEach-Object {
-                            Write-BlueTeamLog "Startup entry in $location : $($_.Name) = $($_.Value)" "WARNING" -Critical
+                            # Check if entry is in whitelist
+                            $isLegitimate = $false
+                            foreach ($legitEntry in $legitimateStartupEntries) {
+                                if ($_.Name -like "*$legitEntry*" -or $_.Value -like "*$legitEntry*") {
+                                    $isLegitimate = $true
+                                    break
+                                }
+                            }
+                            
+                            # Only log if not legitimate
+                            if (-not $isLegitimate) {
+                                Write-BlueTeamLog "SUSPICIOUS startup entry in $location : $($_.Name) = $($_.Value)" "CRITICAL" -Critical
+                            } else {
+                                Write-BlueTeamLog "Legitimate startup entry: $($_.Name)" "INFO"
+                            }
                         }
                     }
                 }
@@ -759,7 +830,13 @@ Write-BlueTeamLog "============================================================"
 try {
     Write-BlueTeamLog "Disabling AutoRun/AutoPlay..." "INFO"
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Value 255 -Type DWord -Force
+    
+    # Create HKCU path if it doesn't exist
+    if (-not (Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer")) {
+        New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Force | Out-Null
+    }
     Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Value 255 -Type DWord -Force
+    
     Add-Change "System Security" "AutoRun" "Disabled" "All drive types"
     Write-BlueTeamLog "AutoRun disabled" "SUCCESS"
 } catch {
@@ -782,11 +859,19 @@ try {
 if ($DisablePowerShellV2) {
     try {
         Write-BlueTeamLog "Disabling PowerShell v2..." "INFO"
-        Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root -NoRestart -ErrorAction SilentlyContinue | Out-Null
-        Add-Change "System Security" "PowerShell v2" "Disabled" "Prevents downgrade attacks"
-        Write-BlueTeamLog "PowerShell v2 disabled" "SUCCESS"
+        
+        # Check if PowerShell v2 feature exists (different names on different Windows versions)
+        $psv2Feature = Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2* -ErrorAction SilentlyContinue
+        
+        if ($psv2Feature) {
+            Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root -NoRestart -ErrorAction SilentlyContinue | Out-Null
+            Add-Change "System Security" "PowerShell v2" "Disabled" "Prevents downgrade attacks"
+            Write-BlueTeamLog "PowerShell v2 disabled" "SUCCESS"
+        } else {
+            Write-BlueTeamLog "PowerShell v2 not present on this system (already secure)" "INFO"
+        }
     } catch {
-        Write-BlueTeamLog "Failed to disable PowerShell v2: $_" "ERROR"
+        Write-BlueTeamLog "PowerShell v2 not available on this Windows version" "INFO"
     }
 }
 
