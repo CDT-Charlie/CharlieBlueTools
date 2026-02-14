@@ -12,6 +12,21 @@
     DEFAULT PASSWORD: FriendshipIsMagic0!
     SCORING ENGINE: https://172.20.0.100:443
     
+.BEFORE_RUNNING
+    **REQUIRED CONFIGURATION - EDIT THESE VARIABLES:**
+    
+    1. $AuthorizedAdmins (Line ~48) - Add your blue team usernames
+       Example: @("blueteam1", "blueteam2", "blueteam3")
+    
+    2. $SetAllUserPasswords (Line ~56) - Change to YOUR secure password
+       Example: "YourTeamPassword2026!Secure"
+       NOTE: Avoid using # symbol - use ! @ $ % ^ & * instead
+    
+    3. $SafeIPAddresses (Line ~61) - Verify scoring engine/jumpbox IPs
+       (Default values should work for CDT competition)
+    
+    **OPTIONAL:** Review $SafeUsers (Line ~27) to ensure all competition users are protected
+    
 .CRITICAL_RULES
     Rule 9: DO NOT disable any valid user accounts listed in the packet
     Rule 10: DO NOT disable SSH on Linux or RDP on Windows
@@ -27,10 +42,14 @@
     
 .NOTES
     Author: Blue Team Security Script - CDT Competition Edition
-    Version: 2.1-CDT
+    Version: 2.2-CDT
     Requires: PowerShell 5.1+ and Administrator privileges
     Competition Ready: Yes
-    Last Updated: Spring 2026
+    Last Updated: February 2026
+    
+.EXAMPLE
+    # Run the script (after configuring variables above)
+    .\BlueTeam-Hardening-Script.ps1
 #>
 
 # ============================================================================
@@ -88,9 +107,11 @@ $AuthorizedAdmins = @(
     # Add your blue team members here
 )
 
-# Password to set for all authorized blue team users (CHANGE THIS!)
+# Password to set for all authorized blue team users (CHANGE THIS BEFORE RUNNING!)
 # Keep it strong - competition default is FriendshipIsMagic0!
-$SetAllUserPasswords = "BlueDefender2026!Secure#CDT"
+# NOTE: Use only these special characters: ! @ $ % ^ & * ( ) - _ = + [ ] { } ; : , . ?
+# The # symbol can cause issues with Windows password complexity
+$SetAllUserPasswords = "BlueDefender2026!Secure@CDT"
 
 # NETWORK SECURITY - CDT Competition Network
 # IP addresses that should NEVER be blocked (scoring engine, gray team, jumpboxes)
@@ -271,6 +292,46 @@ if ($scriptRunCount -gt 1) {
 }
 Write-BlueTeamLog "Log file: $LogFilePath" "INFO"
 Write-BlueTeamLog "Hostname: $hostname" "INFO"
+Write-BlueTeamLog "" "INFO"
+
+# CONFIGURATION VALIDATION
+Write-BlueTeamLog "============================================================" "INFO"
+Write-BlueTeamLog "CONFIGURATION VALIDATION" "CRITICAL"
+Write-BlueTeamLog "============================================================" "INFO"
+
+$configWarnings = @()
+
+# Check if default password was changed
+if ($SetAllUserPasswords -eq "BlueDefender2026!Secure@CDT") {
+    $configWarnings += "Default password detected - you should change `$SetAllUserPasswords to your team password!"
+}
+
+# Check if default admin users are still set
+if ($AuthorizedAdmins -contains "blueteam1" -and $AuthorizedAdmins.Count -eq 3) {
+    $configWarnings += "Default admin usernames detected - you should customize `$AuthorizedAdmins with your team members!"
+}
+
+# Validate password meets basic complexity
+if ($SetAllUserPasswords.Length -lt 8) {
+    $configWarnings += "Password is too short (minimum 8 characters required)"
+}
+
+if ($SetAllUserPasswords -match '#') {
+    $configWarnings += "Password contains # symbol which may cause issues - use ! @ $ % ^ & * instead"
+}
+
+if ($configWarnings.Count -gt 0) {
+    Write-BlueTeamLog "Configuration warnings detected:" "WARNING"
+    foreach ($warning in $configWarnings) {
+        Write-BlueTeamLog "  ! $warning" "WARNING"
+    }
+    Write-BlueTeamLog "" "INFO"
+    Write-BlueTeamLog "Press Ctrl+C to cancel and edit configuration, or wait 5 seconds to continue..." "WARNING"
+    Start-Sleep -Seconds 5
+} else {
+    Write-BlueTeamLog "Configuration validation passed" "SUCCESS"
+}
+
 Write-BlueTeamLog "" "INFO"
 
 # PRE-FLIGHT RULES COMPLIANCE CHECK
@@ -518,7 +579,7 @@ Write-BlueTeamLog "============================================================"
 try {
     # Enable firewall on all profiles
     Write-BlueTeamLog "Enabling Windows Firewall on all profiles..." "INFO"
-    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True -DefaultInboundAction Block -DefaultOutboundAction Allow
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True -DefaultInboundAction Block -DefaultOutboundAction Allow -ErrorAction SilentlyContinue
     Add-Change "Firewall" "Firewall Status" "Enabled" "All profiles with default deny inbound"
     Write-BlueTeamLog "Firewall enabled on all profiles" "SUCCESS"
     
@@ -534,7 +595,7 @@ try {
         $logAllowed = if ($LogAllowedConnections) { "True" } else { "False" }
         $logBlocked = if ($LogDroppedPackets) { "True" } else { "False" }
         
-        Set-NetFirewallProfile -Profile Domain,Public,Private -LogAllowed $logAllowed -LogBlocked $logBlocked -LogFileName "$logPath\pfirewall.log" -LogMaxSizeKilobytes 32767
+        Set-NetFirewallProfile -Profile Domain,Public,Private -LogAllowed $logAllowed -LogBlocked $logBlocked -LogFileName "$logPath\pfirewall.log" -LogMaxSizeKilobytes 32767 -ErrorAction SilentlyContinue
         Write-BlueTeamLog "Firewall logging configured" "SUCCESS"
     }
     
@@ -547,7 +608,7 @@ if ($BlockAllInboundByDefault) {
     Write-BlueTeamLog "" "INFO"
     Write-BlueTeamLog "Removing potentially malicious inbound firewall rules..." "INFO"
     
-    $existingRules = Get-NetFirewallRule -Direction Inbound -Enabled True
+    $existingRules = Get-NetFirewallRule -Direction Inbound -Enabled True -ErrorAction SilentlyContinue
     $removedRulesCount = 0
     
     foreach ($rule in $existingRules) {
@@ -600,7 +661,7 @@ foreach ($port in $AllowedInboundPorts) {
             -LocalPort $port `
             -Action Allow `
             -Enabled True `
-            -Profile Any | Out-Null
+            -Profile Any -ErrorAction SilentlyContinue | Out-Null
         
         Write-BlueTeamLog "Created firewall rule for port $port" "SUCCESS"
         Add-Change "Firewall" "Allowed Port" $port "Inbound traffic allowed"
@@ -632,7 +693,7 @@ foreach ($ip in $SafeIPAddresses) {
             -RemoteAddress $ip `
             -Action Allow `
             -Enabled True `
-            -Profile Any | Out-Null
+            -Profile Any -ErrorAction SilentlyContinue | Out-Null
         
         Write-BlueTeamLog "Created firewall rule for safe IP: $ip" "SUCCESS"
         Add-Change "Firewall" "Safe IP Address" $ip "All traffic allowed"
@@ -661,7 +722,7 @@ foreach ($ipRange in $SafeIPRanges) {
             -RemoteAddress $ipRange `
             -Action Allow `
             -Enabled True `
-            -Profile Any | Out-Null
+            -Profile Any -ErrorAction SilentlyContinue | Out-Null
         
         Write-BlueTeamLog "Created firewall rule for safe IP range: $ipRange" "SUCCESS"
         Add-Change "Firewall" "Safe IP Range" $ipRange "All traffic allowed"
@@ -680,7 +741,7 @@ Write-BlueTeamLog "============================================================"
 
 if ($EnableSSHHardening) {
     # Check if OpenSSH Server is installed
-    $sshServerFeature = Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Server*'
+    $sshServerFeature = Get-WindowsCapability -Online -ErrorAction SilentlyContinue | Where-Object Name -like 'OpenSSH.Server*'
     
     if ($sshServerFeature.State -eq "Installed") {
         Write-BlueTeamLog "OpenSSH Server detected, applying hardening..." "INFO"
@@ -1016,7 +1077,7 @@ if ($ScanForBackdoors) {
             "\Symantec\"
         )
         
-        $allTasks = Get-ScheduledTask | Where-Object { $_.State -ne "Disabled" }
+        $allTasks = Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.State -ne "Disabled" }
         $suspiciousCount = 0
         
         foreach ($task in $allTasks) {
