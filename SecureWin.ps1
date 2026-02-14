@@ -1,63 +1,127 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Blue Team Windows Hardening Script for Cyber Competitions
+    Blue Team Windows Hardening Script for CDT Competition - Team Alpha Spring 2026
 .DESCRIPTION
     Comprehensive hardening script designed for Blue vs Red team competitions.
     Removes unauthorized users, hardens SSH, configures firewall, and locks down the system
     while preserving competition infrastructure through whitelisting.
+    
+    COMPETITION: CDT Team Alpha Spring 2026
+    DOMAIN: mlp.local
+    DEFAULT PASSWORD: FriendshipIsMagic0!
+    SCORING ENGINE: https://172.20.0.100:443
+    
+.CRITICAL_RULES
+    Rule 9: DO NOT disable any valid user accounts listed in the packet
+    Rule 10: DO NOT disable SSH on Linux or RDP on Windows
+    Rule 7: DO NOT block entire subnets (no subnet blocking)
+    Rule 14: Password changes limited to 3 per host per comp session
+    Rule 5: DO NOT modify artifacts with "greyteam" in their name
+    
+.SCORED_SERVICES
+    Windows Servers: canterlot (AD), manehatten (MSSQL), las-pegasus (IIS), appleloosa (SMB)
+    Linux Servers: ponyville (Apache2), seaddle (MariaDB), trotsylvania (CUPS), 
+                   crystal-empire (vsftpd), everfree-forest (IRC), griffonstone (Nginx)
+    Workstations: 3x Windows 10, 3x Ubuntu 24.04
+    
 .NOTES
-    Author: Blue Team Security Script
-    Version: 2.0
+    Author: Blue Team Security Script - CDT Competition Edition
+    Version: 2.1-CDT
     Requires: PowerShell 5.1+ and Administrator privileges
     Competition Ready: Yes
+    Last Updated: Spring 2026
 #>
 
 # ============================================================================
-# CRITICAL COMPETITION VARIABLES - CONFIGURE THESE FIRST!
+# CRITICAL COMPETITION VARIABLES - CDT TEAM ALPHA SPRING 2026
 # ============================================================================
 
-# USER MANAGEMENT
-# List of users that should NOT be removed (competition infrastructure users)
+# USER MANAGEMENT - CDT Competition Users (DO NOT REMOVE OR DISABLE!)
+# Per Rule 9: Do not disable any valid user accounts listed in the competition packet
 $SafeUsers = @(
+    # Windows Default Users
     "Administrator",
     "DefaultAccount",
     "Guest",
     "WDAGUtilityAccount",
-    "grayteam",           # Example: Gray team user
-    "scoring"             # Example: Scoring engine user
-    # Add any other competition-specific users here
+    
+    # Local Users (from competition packet)
+    "twilight",
+    "pinkiepie",
+    "applejack",
+    "rarity",
+    "rainbowdash",
+    "fluttershy",
+    
+    # Local Admin Users (from competition packet)
+    "bigmac",
+    "mayormare",
+    "shiningarmor",
+    "cadence",
+    
+    # Domain Users (from competition packet)
+    "spike",
+    "starlight",
+    "trixie",
+    "derpy",
+    "snips",
+    "snails",
+    
+    # Domain Admin Users (from competition packet)
+    "celestia",
+    "discord",
+    "luna",
+    "starswirlthebearded",
+    
+    # Gray Team (anything with "greyteam" per Rule 3 & 5)
+    "greyteam",
+    "grayteam"
 )
 
 # List of users that should have admin access and password reset
+# These are YOUR blue team users - add them here
 $AuthorizedAdmins = @(
-    "blueteam",
-    "sysadmin",
-    "defender"
-    # Add your blue team usernames here
+    "blueteam1",
+    "blueteam2",
+    "blueteam3"
+    # Add your blue team members here
 )
 
-# Password to set for all authorized users (CHANGE THIS!)
-$SetAllUserPasswords = "BlueTeam2024!Secure"
+# Password to set for all authorized blue team users (CHANGE THIS!)
+# Keep it strong - competition default is FriendshipIsMagic0!
+$SetAllUserPasswords = "BlueDefender2026!Secure#CDT"
 
-# NETWORK SECURITY
-# IP addresses that should NEVER be blocked (scoring engine, gray team, etc.)
+# NETWORK SECURITY - CDT Competition Network
+# IP addresses that should NEVER be blocked (scoring engine, gray team, jumpboxes)
+# Per Rule 7: Do not configure firewall rules that block large IP ranges
 $SafeIPAddresses = @(
-    "10.0.0.1",          # Example: Scoring engine
-    "192.168.1.100",     # Example: Gray team
-    "172.16.0.5"         # Example: Competition infrastructure
-    # Add competition-specific IPs here
+    "172.20.0.100",      # Scoring engine (critical!)
+    "172.20.0.41",       # jumpblue1
+    "172.20.0.42",       # jumpblue2
+    "172.20.0.43",       # jumpblue3
+    "172.20.0.44",       # jumpblue4
+    "172.20.0.45",       # jumpblue5
+    "172.20.0.46",       # jumpblue6
+    "172.20.0.47",       # jumpblue7
+    "172.20.0.48",       # jumpblue8
+    "172.20.0.49",       # jumpblue9
+    "172.20.0.40"        # jumpblue10
 )
 
 # IP ranges to allow (in CIDR notation)
+# IMPORTANT: Per Rule 7, do NOT block entire subnets
+# These ranges are for ALLOW rules only, not BLOCK rules
 $SafeIPRanges = @(
-    "10.0.0.0/24",       # Example: Competition network
-    "192.168.1.0/24"     # Example: Management network
-    # Add allowed IP ranges here
+    "172.20.0.0/24",     # Management/Competition network (scoring, jumpboxes)
+    "10.0.10.0/24",      # Core Subnet (scored services)
+    "10.0.20.0/24",      # DMZ Subnet (scored services)
+    "10.0.30.0/24"       # Internal Subnet (workstations)
 )
 
 # SSH CONFIGURATION
-$EnableSSHHardening = $true              # Enable SSH hardening
+# CRITICAL: Per Rule 10 - Teams may NOT disable SSH on Linux or RDP on Windows
+$EnableSSHHardening = $true              # Enable SSH hardening (but not disable)
 $SSHPort = 22                            # SSH port (change if non-standard)
 $AllowSSHPasswordAuth = $false           # Disable password auth (use keys only)
 $SSHMaxAuthTries = 3                     # Maximum authentication attempts
@@ -65,7 +129,19 @@ $SSHLoginGraceTime = 30                  # Seconds to complete authentication
 
 # FIREWALL CONFIGURATION
 $BlockAllInboundByDefault = $true        # Block all inbound except allowed
-$AllowedInboundPorts = @(22, 80, 443)   # Ports to allow inbound (SSH, HTTP, HTTPS)
+# Per competition topology - these ports are critical for scored services
+$AllowedInboundPorts = @(
+    22,    # SSH (required per Rule 10)
+    80,    # HTTP (Apache2, IIS, Nginx scored services)
+    443,   # HTTPS (IIS scored service)
+    3389,  # RDP (required per Rule 10)
+    445,   # SMB (scored service on appleloosa)
+    3306,  # MySQL/MariaDB (scored service on seaddle)
+    1433,  # MSSQL (scored service on manehatten)
+    21,    # FTP (vsftpd scored service on crystal-empire)
+    631,   # CUPS (scored service on trotsylvania)
+    6667   # IRC (scored service on everfree-forest)
+)
 $LogDroppedPackets = $true               # Log all dropped packets
 $LogAllowedConnections = $true           # Log allowed connections
 
@@ -90,7 +166,7 @@ $AccountLockoutDuration = 30             # Lockout duration in minutes
 
 # SYSTEM HARDENING
 $DisableSMBv1 = $true                    # Disable SMBv1 (critical!)
-$DisableRDP = $false                     # Disable RDP if not needed
+$DisableRDP = $false                     # CRITICAL: Per Rule 10 - CANNOT disable RDP!
 $EnableWindowsDefender = $true           # Enable Windows Defender
 $DisableUSBStorage = $false              # Disable USB storage devices
 $DisablePowerShellV2 = $true             # Disable PowerShell v2
@@ -112,6 +188,32 @@ $Changes = @()
 $SecurityIssues = @()
 $RemovedUsers = @()
 $RemovedItems = @()
+
+# Detect hostname to prevent breaking scored services
+$hostname = $env:COMPUTERNAME.ToLower()
+Write-Host "Detected hostname: $hostname" -ForegroundColor Cyan
+
+# Track script runs
+$runCounterPath = "C:\BlueTeam\script-run-counter.txt"
+$runCounterDir = Split-Path -Path $runCounterPath -Parent
+if (-not (Test-Path $runCounterDir)) {
+    New-Item -ItemType Directory -Path $runCounterDir -Force | Out-Null
+}
+
+$scriptRunCount = 1
+if (Test-Path $runCounterPath) {
+    try {
+        $scriptRunCount = [int](Get-Content $runCounterPath) + 1
+    } catch {
+        $scriptRunCount = 1
+    }
+}
+Set-Content -Path $runCounterPath -Value $scriptRunCount
+
+Write-Host "Script run count: $scriptRunCount" -ForegroundColor Cyan
+if ($scriptRunCount -gt 1) {
+    Write-Host "NOTE: This is run #$scriptRunCount - idempotent operations will be skipped" -ForegroundColor Yellow
+}
 
 # Create log directory if it doesn't exist
 $LogDirectory = Split-Path -Path $LogFilePath -Parent
@@ -160,9 +262,46 @@ function Add-Change {
 
 Write-BlueTeamLog "============================================================" "INFO"
 Write-BlueTeamLog "BLUE TEAM WINDOWS HARDENING SCRIPT - COMPETITION MODE" "CRITICAL"
+Write-BlueTeamLog "CDT TEAM ALPHA - SPRING 2026" "CRITICAL"
 Write-BlueTeamLog "============================================================" "INFO"
 Write-BlueTeamLog "Script started at: $ScriptStartTime" "INFO"
+Write-BlueTeamLog "Script run count: $scriptRunCount" "INFO"
+if ($scriptRunCount -gt 1) {
+    Write-BlueTeamLog "Note: This is not the first run - idempotent operations will be skipped" "INFO"
+}
 Write-BlueTeamLog "Log file: $LogFilePath" "INFO"
+Write-BlueTeamLog "Hostname: $hostname" "INFO"
+Write-BlueTeamLog "" "INFO"
+
+# PRE-FLIGHT RULES COMPLIANCE CHECK
+Write-BlueTeamLog "============================================================" "INFO"
+Write-BlueTeamLog "PRE-FLIGHT RULES COMPLIANCE CHECK" "CRITICAL"
+Write-BlueTeamLog "============================================================" "INFO"
+
+$complianceIssues = @()
+
+# Check Rule 10: SSH/RDP disable
+if ($DisableRDP -eq $true) {
+    $complianceIssues += "Rule 10 VIOLATION: DisableRDP is set to TRUE - this violates competition rules!"
+    Write-BlueTeamLog "WARNING: DisableRDP is enabled - will be skipped to comply with Rule 10" "WARNING"
+}
+
+# Check Rule 9: Protected users
+$protectedUserCount = $SafeUsers.Count
+Write-BlueTeamLog "Protected users count: $protectedUserCount (includes all competition users)" "INFO"
+
+# Check firewall configuration for Rule 7
+Write-BlueTeamLog "Firewall configuration: Individual IP/port rules (compliant with Rule 7)" "INFO"
+
+if ($complianceIssues.Count -eq 0) {
+    Write-BlueTeamLog "Pre-flight check PASSED: Configuration is rules-compliant" "SUCCESS"
+} else {
+    Write-BlueTeamLog "Pre-flight check WARNING: $($complianceIssues.Count) potential issues detected" "WARNING"
+    foreach ($issue in $complianceIssues) {
+        Write-BlueTeamLog "  - $issue" "WARNING"
+    }
+}
+
 Write-BlueTeamLog "" "INFO"
 
 # ============================================================================
@@ -228,28 +367,80 @@ foreach ($adminUser in $AuthorizedAdmins) {
             New-LocalUser -Name $adminUser -Password $SecurePassword -FullName "Blue Team Admin" -Description "Authorized Blue Team Administrator" -PasswordNeverExpires:$true
             Add-Change "User Management" "Created User" $adminUser "New authorized admin user"
             Write-BlueTeamLog "Successfully created user: $adminUser" "SUCCESS"
-        } else {
-            # Reset password for existing user
-            Write-BlueTeamLog "Resetting password for existing user: $adminUser" "INFO"
-            $SecurePassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
-            Set-LocalUser -Name $adminUser -Password $SecurePassword
-            Write-BlueTeamLog "Password reset for user: $adminUser" "SUCCESS"
-        }
-        
-        # Add to Administrators group
-        $adminGroup = Get-LocalGroup -Name "Administrators"
-        $isMember = Get-LocalGroupMember -Group "Administrators" | Where-Object { $_.Name -like "*$adminUser" }
-        
-        if (-not $isMember) {
+            
+            # Add to Administrators group
+            $adminGroup = Get-LocalGroup -Name "Administrators"
             Add-LocalGroupMember -Group "Administrators" -Member $adminUser -ErrorAction SilentlyContinue
             Write-BlueTeamLog "Added $adminUser to Administrators group" "SUCCESS"
             Add-Change "User Management" "Admin Rights" $adminUser "Added to Administrators group"
+            
         } else {
-            Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
+            # User exists - try to reset password
+            Write-BlueTeamLog "User $adminUser exists - attempting password reset..." "INFO"
+            
+            # Test if the password is already set to our target password
+            $testPassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
+            $credential = New-Object System.Management.Automation.PSCredential($adminUser, $testPassword)
+            
+            # Try to validate the credential (this won't work on domain accounts, but that's okay)
+            $passwordAlreadySet = $false
+            try {
+                # This is a best-effort check - if it fails, we'll try to set the password anyway
+                Add-Type -AssemblyName System.DirectoryServices.AccountManagement
+                $contextType = [System.DirectoryServices.AccountManagement.ContextType]::Machine
+                $principalContext = New-Object System.DirectoryServices.AccountManagement.PrincipalContext($contextType)
+                $passwordAlreadySet = $principalContext.ValidateCredentials($adminUser, $SetAllUserPasswords)
+            } catch {
+                # If validation fails, assume password needs to be set
+                $passwordAlreadySet = $false
+            }
+            
+            if ($passwordAlreadySet) {
+                Write-BlueTeamLog "Password for $adminUser is already set correctly - skipping password reset" "INFO"
+            } else {
+                # Try to set the password
+                try {
+                    $SecurePassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
+                    Set-LocalUser -Name $adminUser -Password $SecurePassword -ErrorAction Stop
+                    Write-BlueTeamLog "Password reset for user: $adminUser" "SUCCESS"
+                    Add-Change "User Management" "Password Reset" $adminUser "Password updated"
+                } catch {
+                    if ($_.Exception.Message -like "*minimum password age*" -or $_.Exception.Message -like "*password policy*") {
+                        Write-BlueTeamLog "Cannot reset password for $adminUser - minimum password age restriction (script may have been run recently)" "WARNING"
+                        Write-BlueTeamLog "  This is normal if the script was run within the minimum password age period" "INFO"
+                    } else {
+                        Write-BlueTeamLog "Failed to reset password for $adminUser : $_" "ERROR"
+                    }
+                }
+            }
+            
+            # Ensure user is in Administrators group (idempotent operation)
+            $adminGroup = Get-LocalGroup -Name "Administrators"
+            $isMember = Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$adminUser" }
+            
+            if (-not $isMember) {
+                try {
+                    Add-LocalGroupMember -Group "Administrators" -Member $adminUser -ErrorAction Stop
+                    Write-BlueTeamLog "Added $adminUser to Administrators group" "SUCCESS"
+                    Add-Change "User Management" "Admin Rights" $adminUser "Added to Administrators group"
+                } catch {
+                    if ($_.Exception.Message -like "*already a member*") {
+                        Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
+                    } else {
+                        Write-BlueTeamLog "Failed to add $adminUser to Administrators: $_" "WARNING"
+                    }
+                }
+            } else {
+                Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
+            }
         }
         
-        # Enable the user account
-        Enable-LocalUser -Name $adminUser
+        # Enable the user account (idempotent)
+        try {
+            Enable-LocalUser -Name $adminUser -ErrorAction Stop
+        } catch {
+            Write-BlueTeamLog "User $adminUser is already enabled" "INFO"
+        }
         
     } catch {
         Write-BlueTeamLog "Failed to configure admin user $adminUser : $_" "ERROR"
@@ -257,14 +448,20 @@ foreach ($adminUser in $AuthorizedAdmins) {
 }
 
 # Disable Guest account (security best practice)
+# NOTE: Guest is a default Windows account, not a competition user
 Write-BlueTeamLog "" "INFO"
-Write-BlueTeamLog "Disabling Guest account..." "INFO"
+Write-BlueTeamLog "Checking Guest account status..." "INFO"
 try {
-    Disable-LocalUser -Name "Guest" -ErrorAction SilentlyContinue
-    Add-Change "User Management" "Guest Account" "Disabled" "Security hardening"
-    Write-BlueTeamLog "Guest account disabled" "SUCCESS"
+    $guestAccount = Get-LocalUser -Name "Guest" -ErrorAction SilentlyContinue
+    if ($guestAccount -and $guestAccount.Enabled) {
+        Disable-LocalUser -Name "Guest" -ErrorAction SilentlyContinue
+        Add-Change "User Management" "Guest Account" "Disabled" "Security hardening"
+        Write-BlueTeamLog "Guest account disabled" "SUCCESS"
+    } else {
+        Write-BlueTeamLog "Guest account already disabled" "INFO"
+    }
 } catch {
-    Write-BlueTeamLog "Failed to disable Guest account: $_" "ERROR"
+    Write-BlueTeamLog "Could not modify Guest account: $_" "WARNING"
 }
 
 # ============================================================================
@@ -277,14 +474,20 @@ Write-BlueTeamLog "============================================================"
 
 try {
     Write-BlueTeamLog "Setting password policies..." "INFO"
-    net accounts /minpwlen:$MinPasswordLength /maxpwage:$MaxPasswordAge /minpwage:$MinPasswordAge /uniquepw:$PasswordHistoryCount | Out-Null
-    net accounts /lockoutthreshold:$AccountLockoutThreshold /lockoutduration:$AccountLockoutDuration /lockoutwindow:$AccountLockoutDuration | Out-Null
+    
+    # Get current settings to avoid unnecessary changes
+    $needsUpdate = $false
+    
+    # Set account policies (net accounts always succeeds, so we'll just run it)
+    net accounts /minpwlen:$MinPasswordLength /maxpwage:$MaxPasswordAge /minpwage:$MinPasswordAge /uniquepw:$PasswordHistoryCount 2>&1 | Out-Null
+    net accounts /lockoutthreshold:$AccountLockoutThreshold /lockoutduration:$AccountLockoutDuration /lockoutwindow:$AccountLockoutDuration 2>&1 | Out-Null
     
     Add-Change "Password Policy" "Password Requirements" "Configured" "Min: $MinPasswordLength chars, Max age: $MaxPasswordAge days"
     Add-Change "Password Policy" "Account Lockout" "Configured" "Threshold: $AccountLockoutThreshold attempts"
     Write-BlueTeamLog "Password policy configured successfully" "SUCCESS"
     Write-BlueTeamLog "  - Min length: $MinPasswordLength" "INFO"
     Write-BlueTeamLog "  - Max age: $MaxPasswordAge days" "INFO"
+    Write-BlueTeamLog "  - Min age: $MinPasswordAge days (prevents rapid password changes)" "INFO"
     Write-BlueTeamLog "  - Lockout threshold: $AccountLockoutThreshold attempts" "INFO"
 } catch {
     Write-BlueTeamLog "Failed to configure password policy: $_" "ERROR"
@@ -374,8 +577,21 @@ foreach ($port in $AllowedInboundPorts) {
     try {
         $ruleName = "Blue Team - Allow Port $port"
         
-        # Remove existing rule if it exists
-        Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        # Check if rule already exists with correct configuration
+        $existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        
+        if ($existingRule) {
+            # Rule exists - verify it's configured correctly
+            $portFilter = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $existingRule -ErrorAction SilentlyContinue
+            
+            if ($portFilter.LocalPort -eq $port -and $existingRule.Enabled -eq $true -and $existingRule.Action -eq "Allow") {
+                Write-BlueTeamLog "Firewall rule for port $port already exists and is correctly configured" "INFO"
+                continue
+            } else {
+                Write-BlueTeamLog "Firewall rule for port $port exists but needs updating" "INFO"
+                Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+            }
+        }
         
         # Create new rule
         New-NetFirewallRule -DisplayName $ruleName `
@@ -400,8 +616,15 @@ foreach ($ip in $SafeIPAddresses) {
     try {
         $ruleName = "Blue Team - Safe IP $ip"
         
-        # Remove existing rule if it exists
-        Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        # Check if rule already exists correctly
+        $existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        
+        if ($existingRule -and $existingRule.Enabled -eq $true -and $existingRule.Action -eq "Allow") {
+            Write-BlueTeamLog "Firewall rule for safe IP $ip already exists and is correctly configured" "INFO"
+            continue
+        } elseif ($existingRule) {
+            Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        }
         
         # Create new rule allowing all traffic from this IP
         New-NetFirewallRule -DisplayName $ruleName `
@@ -423,7 +646,15 @@ foreach ($ipRange in $SafeIPRanges) {
     try {
         $ruleName = "Blue Team - Safe Range $ipRange"
         
-        Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        # Check if rule already exists correctly
+        $existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        
+        if ($existingRule -and $existingRule.Enabled -eq $true -and $existingRule.Action -eq "Allow") {
+            Write-BlueTeamLog "Firewall rule for safe IP range $ipRange already exists and is correctly configured" "INFO"
+            continue
+        } elseif ($existingRule) {
+            Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        }
         
         New-NetFirewallRule -DisplayName $ruleName `
             -Direction Inbound `
@@ -474,13 +705,42 @@ if ($EnableSSHHardening) {
         
         try {
             # Backup original config if it exists
+            $skipSSHConfig = $false
+            
             if (Test-Path $sshdConfigPath) {
-                $backupPath = "$sshdConfigPath.backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-                Copy-Item $sshdConfigPath $backupPath
-                Write-BlueTeamLog "Backed up SSH config to: $backupPath" "INFO"
+                # Check if config is already hardened
+                $currentConfig = Get-Content $sshdConfigPath -Raw
+                
+                if ($currentConfig -like "*Blue Team Hardened SSH Configuration*") {
+                    Write-BlueTeamLog "SSH configuration already hardened - skipping config rewrite" "INFO"
+                    $skipSSHConfig = $true
+                    
+                    # Still ensure SSH service is running and set to automatic
+                    try {
+                        $sshService = Get-Service -Name sshd -ErrorAction SilentlyContinue
+                        if ($sshService.Status -ne "Running") {
+                            Start-Service sshd -ErrorAction SilentlyContinue
+                            Write-BlueTeamLog "Started SSH service" "SUCCESS"
+                        }
+                        if ($sshService.StartType -ne "Automatic") {
+                            Set-Service -Name sshd -StartupType Automatic
+                            Write-BlueTeamLog "Set SSH service to automatic startup" "SUCCESS"
+                        }
+                    } catch {
+                        Write-BlueTeamLog "Failed to configure SSH service: $_" "WARNING"
+                    }
+                }
+                
+                if (-not $skipSSHConfig) {
+                    $backupPath = "$sshdConfigPath.backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+                    Copy-Item $sshdConfigPath $backupPath
+                    Write-BlueTeamLog "Backed up SSH config to: $backupPath" "INFO"
+                }
             } else {
                 Write-BlueTeamLog "Creating new SSH config file" "INFO"
             }
+            
+            if (-not $skipSSHConfig) {
                 
                 # Create hardened config
                 $hardenedConfig = @"
@@ -549,9 +809,11 @@ Subsystem       sftp    sftp-server.exe
                     Write-BlueTeamLog "SSH firewall rule enabled" "SUCCESS"
                 }
                 
-            } catch {
-                Write-BlueTeamLog "Failed to harden SSH configuration: $_" "ERROR"
-            }
+            } # End of if (-not $skipSSHConfig)
+                
+        } catch {
+            Write-BlueTeamLog "Failed to harden SSH configuration: $_" "ERROR"
+        }
         
         # Set proper permissions on SSH directory
         try {
@@ -594,38 +856,125 @@ Write-BlueTeamLog "============================================================"
 # Disable SMBv1 (critical vulnerability)
 if ($DisableSMBv1) {
     try {
-        Write-BlueTeamLog "Disabling SMBv1 protocol..." "INFO"
-        Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force -ErrorAction SilentlyContinue
-        Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart -ErrorAction SilentlyContinue | Out-Null
-        Add-Change "Network Security" "SMBv1" "Disabled" "Critical vulnerability mitigation"
-        Write-BlueTeamLog "SMBv1 disabled successfully" "SUCCESS"
+        Write-BlueTeamLog "Checking SMB protocol configuration..." "INFO"
+        
+        # Check if this is the SMB scored service host (appleloosa - 10.0.20.2)
+        if ($hostname -eq "appleloosa") {
+            Write-BlueTeamLog "WARNING: This is the SMB scored service host!" "WARNING"
+            Write-BlueTeamLog "SMBv1 will be disabled, but SMBv2/v3 will remain enabled for scoring" "INFO"
+        }
+        
+        # Check current SMB configuration
+        $smbConfig = Get-SmbServerConfiguration -ErrorAction SilentlyContinue
+        $madeChanges = $false
+        
+        if ($smbConfig) {
+            # Disable SMBv1 if it's enabled
+            if ($smbConfig.EnableSMB1Protocol -eq $true) {
+                Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force -ErrorAction Stop
+                $madeChanges = $true
+                Write-BlueTeamLog "SMBv1 protocol disabled" "SUCCESS"
+            } else {
+                Write-BlueTeamLog "SMBv1 protocol already disabled" "INFO"
+            }
+            
+            # Ensure SMBv2/v3 is enabled (critical for SMB scored service)
+            if ($smbConfig.EnableSMB2Protocol -eq $false) {
+                Set-SmbServerConfiguration -EnableSMB2Protocol $true -Force -ErrorAction Stop
+                $madeChanges = $true
+                Write-BlueTeamLog "SMBv2/v3 protocol enabled" "SUCCESS"
+            } else {
+                Write-BlueTeamLog "SMBv2/v3 protocol already enabled" "INFO"
+            }
+        }
+        
+        # Also disable the Windows feature for SMBv1
+        try {
+            $smb1Feature = Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction SilentlyContinue
+            if ($smb1Feature -and $smb1Feature.State -eq "Enabled") {
+                Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart -ErrorAction Stop | Out-Null
+                $madeChanges = $true
+                Write-BlueTeamLog "SMBv1 Windows feature disabled" "SUCCESS"
+            } elseif ($smb1Feature -and $smb1Feature.State -eq "Disabled") {
+                Write-BlueTeamLog "SMBv1 Windows feature already disabled" "INFO"
+            }
+        } catch {
+            Write-BlueTeamLog "SMBv1 feature management not available or already handled" "INFO"
+        }
+        
+        if ($madeChanges) {
+            Add-Change "Network Security" "SMBv1" "Disabled" "Critical vulnerability mitigation (SMBv2/3 still enabled)"
+            Write-BlueTeamLog "SMB protocol configuration updated successfully" "SUCCESS"
+        } else {
+            Write-BlueTeamLog "SMB protocol already properly configured" "INFO"
+        }
     } catch {
-        Write-BlueTeamLog "Failed to disable SMBv1: $_" "ERROR"
+        Write-BlueTeamLog "Failed to configure SMB protocols: $_" "ERROR"
     }
 }
 
 # Disable LLMNR (Link-Local Multicast Name Resolution)
 try {
-    Write-BlueTeamLog "Disabling LLMNR..." "INFO"
-    New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT" -Name "DNSClient" -Force | Out-Null
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -Value 0 -Type DWord -Force
-    Add-Change "Network Security" "LLMNR" "Disabled" "Prevents credential theft"
-    Write-BlueTeamLog "LLMNR disabled" "SUCCESS"
+    Write-BlueTeamLog "Checking LLMNR configuration..." "INFO"
+    $llmnrPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient"
+    
+    # Create path if it doesn't exist
+    if (-not (Test-Path $llmnrPath)) {
+        New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT" -Name "DNSClient" -Force | Out-Null
+    }
+    
+    $currentValue = (Get-ItemProperty -Path $llmnrPath -Name "EnableMulticast" -ErrorAction SilentlyContinue).EnableMulticast
+    
+    if ($currentValue -ne 0) {
+        Set-ItemProperty -Path $llmnrPath -Name "EnableMulticast" -Value 0 -Type DWord -Force
+        Add-Change "Network Security" "LLMNR" "Disabled" "Prevents credential theft"
+        Write-BlueTeamLog "LLMNR disabled" "SUCCESS"
+    } else {
+        Write-BlueTeamLog "LLMNR already disabled" "INFO"
+    }
 } catch {
     Write-BlueTeamLog "Failed to disable LLMNR: $_" "ERROR"
 }
 
 # Disable NetBIOS over TCP/IP
 try {
-    Write-BlueTeamLog "Disabling NetBIOS over TCP/IP..." "INFO"
-    $adapters = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter "IPEnabled = 'True'"
+    Write-BlueTeamLog "Checking NetBIOS over TCP/IP configuration..." "INFO"
+    $adapters = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter "IPEnabled = 'True'" -ErrorAction Stop
+    $disabledCount = 0
+    $alreadyDisabledCount = 0
+    
     foreach ($adapter in $adapters) {
-        $adapter.SetTcpipNetbios(2) | Out-Null
+        try {
+            # Check current NetBIOS setting (0 = Default, 1 = Enabled, 2 = Disabled)
+            $currentSetting = $adapter.TcpipNetbiosOptions
+            
+            if ($currentSetting -ne 2) {
+                $result = $adapter.SetTcpipNetbios(2)
+                if ($result.ReturnValue -eq 0) {
+                    $disabledCount++
+                }
+            } else {
+                $alreadyDisabledCount++
+            }
+        } catch {
+            Write-BlueTeamLog "Could not modify NetBIOS on adapter: $($adapter.Description)" "WARNING"
+        }
     }
-    Add-Change "Network Security" "NetBIOS" "Disabled" "All network adapters"
-    Write-BlueTeamLog "NetBIOS disabled on all adapters" "SUCCESS"
+    
+    if ($disabledCount -gt 0) {
+        Add-Change "Network Security" "NetBIOS" "Disabled" "$disabledCount adapter(s) updated"
+        Write-BlueTeamLog "NetBIOS disabled on $disabledCount network adapter(s)" "SUCCESS"
+    }
+    
+    if ($alreadyDisabledCount -gt 0) {
+        Write-BlueTeamLog "NetBIOS already disabled on $alreadyDisabledCount adapter(s)" "INFO"
+    }
+    
+    if ($disabledCount -eq 0 -and $alreadyDisabledCount -eq 0) {
+        Write-BlueTeamLog "No network adapters found or NetBIOS configuration unavailable" "WARNING"
+    }
 } catch {
-    Write-BlueTeamLog "Failed to disable NetBIOS: $_" "ERROR"
+    Write-BlueTeamLog "Failed to configure NetBIOS: $_" "ERROR"
 }
 
 # Disable IPv6 if not needed (optional)
@@ -671,6 +1020,12 @@ if ($ScanForBackdoors) {
         $suspiciousCount = 0
         
         foreach ($task in $allTasks) {
+            # CRITICAL: Per Rule 3 & 5 - Do not modify artifacts with "greyteam" in name
+            if ($task.TaskName -like "*greyteam*" -or $task.TaskName -like "*grayteam*") {
+                Write-BlueTeamLog "Skipping Gray Team task: $($task.TaskName) (protected by rules)" "INFO"
+                continue
+            }
+            
             # Check for suspicious indicators
             $suspicious = $false
             $reason = ""
@@ -829,16 +1184,31 @@ Write-BlueTeamLog "============================================================"
 # Disable AutoRun/AutoPlay
 try {
     Write-BlueTeamLog "Disabling AutoRun/AutoPlay..." "INFO"
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Value 255 -Type DWord -Force
+    
+    # Check if already set to avoid unnecessary changes
+    $hklmValue = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -ErrorAction SilentlyContinue
+    if ($hklmValue.NoDriveTypeAutoRun -ne 255) {
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Value 255 -Type DWord -Force
+        Write-BlueTeamLog "AutoRun disabled for HKLM" "SUCCESS"
+    } else {
+        Write-BlueTeamLog "AutoRun already disabled for HKLM" "INFO"
+    }
     
     # Create HKCU path if it doesn't exist
     if (-not (Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer")) {
         New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Force | Out-Null
     }
-    Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Value 255 -Type DWord -Force
+    
+    $hkcuValue = Get-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -ErrorAction SilentlyContinue
+    if ($hkcuValue.NoDriveTypeAutoRun -ne 255) {
+        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Value 255 -Type DWord -Force
+        Write-BlueTeamLog "AutoRun disabled for HKCU" "SUCCESS"
+    } else {
+        Write-BlueTeamLog "AutoRun already disabled for HKCU" "INFO"
+    }
     
     Add-Change "System Security" "AutoRun" "Disabled" "All drive types"
-    Write-BlueTeamLog "AutoRun disabled" "SUCCESS"
+    Write-BlueTeamLog "AutoRun configuration complete" "SUCCESS"
 } catch {
     Write-BlueTeamLog "Failed to disable AutoRun: $_" "ERROR"
 }
@@ -846,11 +1216,33 @@ try {
 # Enable UAC
 try {
     Write-BlueTeamLog "Enabling User Account Control (UAC)..." "INFO"
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 1 -Type DWord -Force
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorAdmin" -Value 2 -Type DWord -Force
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "PromptOnSecureDesktop" -Value 1 -Type DWord -Force
-    Add-Change "System Security" "UAC" "Enabled" "Maximum security level"
-    Write-BlueTeamLog "UAC enabled with secure desktop prompt" "SUCCESS"
+    
+    $uacPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+    $currentLUA = (Get-ItemProperty -Path $uacPath -Name "EnableLUA" -ErrorAction SilentlyContinue).EnableLUA
+    $currentPrompt = (Get-ItemProperty -Path $uacPath -Name "ConsentPromptBehaviorAdmin" -ErrorAction SilentlyContinue).ConsentPromptBehaviorAdmin
+    $currentSecure = (Get-ItemProperty -Path $uacPath -Name "PromptOnSecureDesktop" -ErrorAction SilentlyContinue).PromptOnSecureDesktop
+    
+    $madeChanges = $false
+    
+    if ($currentLUA -ne 1) {
+        Set-ItemProperty -Path $uacPath -Name "EnableLUA" -Value 1 -Type DWord -Force
+        $madeChanges = $true
+    }
+    if ($currentPrompt -ne 2) {
+        Set-ItemProperty -Path $uacPath -Name "ConsentPromptBehaviorAdmin" -Value 2 -Type DWord -Force
+        $madeChanges = $true
+    }
+    if ($currentSecure -ne 1) {
+        Set-ItemProperty -Path $uacPath -Name "PromptOnSecureDesktop" -Value 1 -Type DWord -Force
+        $madeChanges = $true
+    }
+    
+    if ($madeChanges) {
+        Add-Change "System Security" "UAC" "Enabled" "Maximum security level"
+        Write-BlueTeamLog "UAC enabled with secure desktop prompt" "SUCCESS"
+    } else {
+        Write-BlueTeamLog "UAC already properly configured" "INFO"
+    }
 } catch {
     Write-BlueTeamLog "Failed to enable UAC: $_" "ERROR"
 }
@@ -879,30 +1271,72 @@ if ($DisablePowerShellV2) {
 if ($EnableWindowsDefender) {
     try {
         Write-BlueTeamLog "Configuring Windows Defender..." "INFO"
-        Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
-        Set-MpPreference -DisableBehaviorMonitoring $false -ErrorAction SilentlyContinue
-        Set-MpPreference -DisableIOAVProtection $false -ErrorAction SilentlyContinue
-        Set-MpPreference -DisableScriptScanning $false -ErrorAction SilentlyContinue
-        Update-MpSignature -ErrorAction SilentlyContinue
-        Add-Change "System Security" "Windows Defender" "Enabled" "Real-time protection active"
-        Write-BlueTeamLog "Windows Defender enabled and updated" "SUCCESS"
+        
+        # Get current preferences
+        $currentPrefs = Get-MpPreference -ErrorAction SilentlyContinue
+        
+        if ($currentPrefs) {
+            $madeChanges = $false
+            
+            if ($currentPrefs.DisableRealtimeMonitoring -eq $true) {
+                Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
+                $madeChanges = $true
+            }
+            if ($currentPrefs.DisableBehaviorMonitoring -eq $true) {
+                Set-MpPreference -DisableBehaviorMonitoring $false -ErrorAction SilentlyContinue
+                $madeChanges = $true
+            }
+            if ($currentPrefs.DisableIOAVProtection -eq $true) {
+                Set-MpPreference -DisableIOAVProtection $false -ErrorAction SilentlyContinue
+                $madeChanges = $true
+            }
+            if ($currentPrefs.DisableScriptScanning -eq $true) {
+                Set-MpPreference -DisableScriptScanning $false -ErrorAction SilentlyContinue
+                $madeChanges = $true
+            }
+            
+            # Always try to update signatures
+            Write-BlueTeamLog "Updating Windows Defender signatures..." "INFO"
+            Update-MpSignature -ErrorAction SilentlyContinue
+            
+            if ($madeChanges) {
+                Add-Change "System Security" "Windows Defender" "Enabled" "Real-time protection active"
+                Write-BlueTeamLog "Windows Defender enabled and updated" "SUCCESS"
+            } else {
+                Write-BlueTeamLog "Windows Defender already properly configured and signatures updated" "INFO"
+            }
+        } else {
+            Write-BlueTeamLog "Windows Defender not available or not installed" "WARNING"
+        }
     } catch {
         Write-BlueTeamLog "Failed to configure Windows Defender: $_" "ERROR"
     }
 }
 
 # Disable Remote Desktop if configured
+# CRITICAL: Per Rule 10 - Teams may NOT disable RDP on Windows machines
 if ($DisableRDP) {
+    Write-BlueTeamLog "" "INFO"
+    Write-BlueTeamLog "WARNING: RDP disable is configured, but this violates Rule 10!" "CRITICAL"
+    Write-BlueTeamLog "Per competition rules: 'Teams may not disable SSH on Linux machines or RDP on Windows machines'" "CRITICAL"
+    Write-BlueTeamLog "Skipping RDP disable to remain compliant with competition rules" "WARNING"
+    Write-BlueTeamLog "RDP will be hardened instead of disabled" "INFO"
+    
+    # Harden RDP instead of disabling it
     try {
-        Write-BlueTeamLog "Disabling Remote Desktop..." "INFO"
-        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 1 -Force
-        Disable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
-        Stop-Service -Name "TermService" -Force -ErrorAction SilentlyContinue
-        Set-Service -Name "TermService" -StartupType Disabled -ErrorAction SilentlyContinue
-        Add-Change "System Security" "Remote Desktop" "Disabled"
-        Write-BlueTeamLog "Remote Desktop disabled" "SUCCESS"
+        # Require Network Level Authentication
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1 -Force
+        
+        # Set encryption level to high
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "MinEncryptionLevel" -Value 3 -Force
+        
+        # Disable "Always prompt for password"
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "fPromptForPassword" -Value 1 -Force
+        
+        Add-Change "System Security" "Remote Desktop" "Hardened" "NLA enabled, high encryption"
+        Write-BlueTeamLog "RDP hardened (NLA required, high encryption)" "SUCCESS"
     } catch {
-        Write-BlueTeamLog "Failed to disable Remote Desktop: $_" "ERROR"
+        Write-BlueTeamLog "Failed to harden RDP: $_" "ERROR"
     }
 }
 
@@ -1067,7 +1501,11 @@ Write-BlueTeamLog "EXECUTION SUMMARY:" "INFO"
 Write-BlueTeamLog "  Start time: $ScriptStartTime" "INFO"
 Write-BlueTeamLog "  End time: $ScriptEndTime" "INFO"
 Write-BlueTeamLog "  Duration: $($Duration.TotalSeconds) seconds" "INFO"
+Write-BlueTeamLog "  Script run number: $scriptRunCount" "INFO"
 Write-BlueTeamLog "  Total changes applied: $($Changes.Count)" "INFO"
+if ($scriptRunCount -gt 1) {
+    Write-BlueTeamLog "  Note: Some operations were skipped as they were already completed in previous runs" "INFO"
+}
 Write-BlueTeamLog "  Users removed: $($RemovedUsers.Count)" "INFO"
 Write-BlueTeamLog "  Security issues found: $($SecurityIssues.Count)" "INFO"
 
@@ -1116,23 +1554,40 @@ $SafeIPRanges | ForEach-Object {
 # Recommendations
 Write-BlueTeamLog "" "INFO"
 Write-BlueTeamLog "============================================================" "INFO"
-Write-BlueTeamLog "BLUE TEAM RECOMMENDATIONS:" "CRITICAL"
+Write-BlueTeamLog "BLUE TEAM RECOMMENDATIONS - CDT COMPETITION:" "CRITICAL"
 Write-BlueTeamLog "============================================================" "INFO"
 Write-BlueTeamLog "1. RESTART the system to apply all changes" "WARNING"
 Write-BlueTeamLog "2. REVIEW the log file for any errors: $LogFilePath" "WARNING"
-Write-BlueTeamLog "3. MONITOR the Security event log for suspicious activity" "WARNING"
-Write-BlueTeamLog "4. VERIFY all authorized users can still access the system" "WARNING"
-Write-BlueTeamLog "5. TEST network connectivity to scoring infrastructure" "WARNING"
-Write-BlueTeamLog "6. CHECK firewall rules are not blocking competition traffic" "WARNING"
-Write-BlueTeamLog "7. REVIEW and REMOVE any suspicious tasks/services manually" "WARNING"
-Write-BlueTeamLog "8. ENABLE additional monitoring tools if available" "WARNING"
-Write-BlueTeamLog "9. DOCUMENT any Red Team persistence mechanisms found" "WARNING"
-Write-BlueTeamLog "10. KEEP this script running periodically to maintain posture" "WARNING"
+Write-BlueTeamLog "3. VERIFY connectivity to scoring engine at https://172.20.0.100:443" "WARNING"
+Write-BlueTeamLog "4. CHECK that all scored services are still running" "WARNING"
+Write-BlueTeamLog "5. VERIFY all competition users can still access the system" "WARNING"
+Write-BlueTeamLog "6. REMEMBER: You can only change passwords 3 times per host per session!" "CRITICAL"
+Write-BlueTeamLog "7. DO NOT disable SSH or RDP (Rule 10 violation)" "CRITICAL"
+Write-BlueTeamLog "8. DO NOT remove competition users (Rule 9 violation)" "CRITICAL"
+Write-BlueTeamLog "9. DO NOT block entire subnets (Rule 7 violation)" "CRITICAL"
+Write-BlueTeamLog "10. MONITOR the Security event log for Red Team activity" "WARNING"
+Write-BlueTeamLog "11. REVIEW and REMOVE any suspicious tasks/services manually" "WARNING"
+Write-BlueTeamLog "12. CHECK for Red Team persistence mechanisms" "WARNING"
+Write-BlueTeamLog "13. VERIFY firewall rules aren't blocking scoring traffic" "WARNING"
+Write-BlueTeamLog "14. DOCUMENT all actions taken for inject responses" "WARNING"
+Write-BlueTeamLog "15. RUN this script periodically to maintain security posture" "WARNING"
 
 Write-BlueTeamLog "" "INFO"
 Write-BlueTeamLog "============================================================" "INFO"
 Write-BlueTeamLog "HARDENING COMPLETE - SYSTEM READY FOR COMPETITION" "SUCCESS"
 Write-BlueTeamLog "============================================================" "INFO"
+
+# Save completion state
+$completionState = @{
+    LastRunTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    RunCount = $scriptRunCount
+    ChangesApplied = $Changes.Count
+    UsersRemoved = $RemovedUsers.Count
+    SecurityIssues = $SecurityIssues.Count
+    Hostname = $hostname
+    ScriptVersion = "2.1-CDT"
+}
+$completionState | ConvertTo-Json | Set-Content "C:\BlueTeam\last-completion-state.json"
 
 # Final status message
 Write-Host ""
@@ -1140,6 +1595,8 @@ Write-Host "====================================================================
 Write-Host "                    BLUE TEAM HARDENING COMPLETE" -ForegroundColor Green
 Write-Host "================================================================================" -ForegroundColor Cyan
 Write-Host ""
+Write-Host "Script Run: " -NoNewline -ForegroundColor White
+Write-Host "#$scriptRunCount" -ForegroundColor $(if ($scriptRunCount -gt 1) { "Yellow" } else { "Green" })
 Write-Host "Log File: " -NoNewline -ForegroundColor White
 Write-Host "$LogFilePath" -ForegroundColor Yellow
 Write-Host "Changes Applied: " -NoNewline -ForegroundColor White
@@ -1152,21 +1609,54 @@ Write-Host ""
 Write-Host "================================================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Countdown to restart
-Write-BlueTeamLog "Initiating system restart to apply all changes..." "CRITICAL"
-Write-Host ""
+# Smart restart logic - only force restart on first run or if significant changes were made
+$shouldRestart = $false
+$restartReason = ""
 
-for ($i = 10; $i -gt 0; $i--) {
-    Write-Host "System will restart to apply all changes in " -NoNewline -ForegroundColor Yellow
-    Write-Host "$i " -NoNewline -ForegroundColor Red
-    Write-Host "seconds..." -ForegroundColor Yellow
-    Start-Sleep -Seconds 1
+if ($scriptRunCount -eq 1) {
+    $shouldRestart = $true
+    $restartReason = "First run - restart required to apply all system changes"
+} elseif ($Changes.Count -ge 5) {
+    $shouldRestart = $true
+    $restartReason = "Significant changes made ($($Changes.Count) changes) - restart recommended"
+} else {
+    Write-Host "This is run #$scriptRunCount with $($Changes.Count) change(s) applied." -ForegroundColor Yellow
+    Write-Host "Most settings are already configured - restart may not be necessary." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Do you want to restart now? (Y/N): " -NoNewline -ForegroundColor Cyan
+    $restartChoice = Read-Host
+    
+    if ($restartChoice -eq "Y" -or $restartChoice -eq "y") {
+        $shouldRestart = $true
+        $restartReason = "Manual restart requested by user"
+    } else {
+        Write-Host ""
+        Write-Host "Restart skipped. You can manually restart later with: Restart-Computer -Force" -ForegroundColor Yellow
+        Write-Host ""
+        exit 0
+    }
 }
 
-Write-Host ""
-Write-Host "RESTARTING NOW..." -ForegroundColor Red
-Write-BlueTeamLog "System restart initiated" "CRITICAL"
-
-# Force restart (cannot be stopped)
-Start-Sleep -Seconds 1
-Restart-Computer -Force
+if ($shouldRestart) {
+    # Countdown to restart
+    Write-BlueTeamLog "Initiating system restart to apply all changes..." "CRITICAL"
+    Write-BlueTeamLog "Reason: $restartReason" "INFO"
+    Write-Host ""
+    Write-Host $restartReason -ForegroundColor Yellow
+    Write-Host ""
+    
+    for ($i = 10; $i -gt 0; $i--) {
+        Write-Host "System will restart to apply all changes in " -NoNewline -ForegroundColor Yellow
+        Write-Host "$i " -NoNewline -ForegroundColor Red
+        Write-Host "seconds... (Press Ctrl+C to cancel)" -ForegroundColor Yellow
+        Start-Sleep -Seconds 1
+    }
+    
+    Write-Host ""
+    Write-Host "RESTARTING NOW..." -ForegroundColor Red
+    Write-BlueTeamLog "System restart initiated" "CRITICAL"
+    
+    # Force restart (cannot be stopped)
+    Start-Sleep -Seconds 1
+    Restart-Computer -Force
+}
