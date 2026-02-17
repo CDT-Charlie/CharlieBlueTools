@@ -24,3 +24,4 @@ python3 manage_users.py
 Currently incomplete. 
 • Runs list_users.sh and extracts it as a list of tuples where a tuple is (UID, username, status=INACTIVE,ACTIVE,SYSTEM)
 • Prints it out (currently)
+• will make it automatically run purge_users.sh.... soon
