@@ -377,15 +377,122 @@ if ($complianceIssues.Count -eq 0) {
 Write-BlueTeamLog "" "INFO"
 
 # ============================================================================
-# 1. USER ACCOUNT MANAGEMENT AND CLEANUP
+# 1. USER ACCOUNT MANAGEMENT AND CLEANUP (ENHANCED)
 # ============================================================================
 Write-BlueTeamLog "============================================================" "INFO"
-Write-BlueTeamLog "PHASE 1: USER ACCOUNT MANAGEMENT" "CRITICAL"
+Write-BlueTeamLog "PHASE 1: USER ACCOUNT MANAGEMENT (ENHANCED)" "CRITICAL"
 Write-BlueTeamLog "============================================================" "INFO"
 
-# Get all local users
-$AllLocalUsers = Get-LocalUser | Where-Object { $_.Enabled -eq $true }
-Write-BlueTeamLog "Found $($AllLocalUsers.Count) enabled local users" "INFO"
+# Initialize audit data structures
+$UserAuditData = @()
+$BlankPasswordUsers = @()
+$SuspiciousSIDUsers = @()
+$GroupViolations = @()
+
+# Define privileged groups to audit
+$PrivilegedGroups = @(
+    "Administrators",
+    "Remote Desktop Users",
+    "Remote Management Users",
+    "Backup Operators",
+    "Server Operators",
+    "Account Operators",
+    "Print Operators",
+    "Hyper-V Administrators",
+    "Power Users",
+    "Network Configuration Operators",
+    "Cryptographic Operators",
+    "Distributed COM Users",
+    "Event Log Readers",
+    "Performance Log Users",
+    "Performance Monitor Users",
+    "IIS_IUSRS"
+)
+
+# Helper function to test for blank passwords
+function Test-BlankPassword {
+    param([string]$Username)
+    try {
+        Add-Type -AssemblyName System.DirectoryServices.AccountManagement -ErrorAction SilentlyContinue
+        $contextType = [System.DirectoryServices.AccountManagement.ContextType]::Machine
+        $principalContext = New-Object System.DirectoryServices.AccountManagement.PrincipalContext($contextType)
+        $hasBlankPassword = $principalContext.ValidateCredentials($Username, "")
+        return $hasBlankPassword
+    } catch {
+        return $false
+    }
+}
+
+# Helper function to analyze SID for suspicious patterns
+function Test-SuspiciousSID {
+    param([Microsoft.PowerShell.Commands.LocalUser]$User)
+    
+    $suspicious = @()
+    $sid = $User.SID.Value
+    
+    try {
+        # Parse RID (Relative ID - last part of SID)
+        $ridMatch = $sid -match '-(\d+)$'
+        if ($ridMatch) {
+            $rid = [int]$Matches[1]
+            
+            # Check for suspiciously high RID (recently created accounts)
+            # Typical RIDs: 500=Admin, 501=Guest, 503=DefaultAccount
+            # User accounts typically start at 1000+
+            # Threshold of 5000 catches accounts created well after initial setup
+            if ($rid -gt 5000) {
+                $suspicious += "High RID ($rid) - recently created account"
+            }
+            
+            # Check for well-known SID range violations
+            # RIDs 500-999 are reserved for built-in accounts
+            if ($rid -ge 500 -and $rid -lt 1000 -and $User.Name -notin @('Administrator','Guest','DefaultAccount','WDAGUtilityAccount','krbtgt')) {
+                $suspicious += "Reserved RID range ($rid) with non-standard name - possible SID manipulation"
+            }
+        }
+        
+        # Check SID structure (should be S-1-5-21-... for local accounts)
+        if ($sid -notmatch '^S-1-5-21-') {
+            $suspicious += "Non-standard SID structure - not a typical local account SID"
+        }
+    } catch {
+        $suspicious += "Error analyzing SID: $_"
+    }
+    
+    return $suspicious
+}
+
+# Helper function to get all groups for a user
+function Get-UserGroups {
+    param([string]$Username)
+    $groups = @()
+    try {
+        $userObj = [ADSI]"WinNT://./$Username,user"
+        $userObj.Groups() | ForEach-Object {
+            $groups += $_.GetType().InvokeMember("Name", 'GetProperty', $null, $_, $null)
+        }
+    } catch {
+        # Fallback method
+        try {
+            $groups = (Get-LocalGroup | Where-Object {
+                (Get-LocalGroupMember -Group $_.Name -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$Username" }) -ne $null
+            }).Name
+        } catch {}
+    }
+    return $groups
+}
+
+# ============================================================================
+# 1.1 - GET ALL USERS AND CLASSIFY
+# ============================================================================
+Write-BlueTeamLog "Step 1.1: Gathering all local user accounts..." "INFO"
+
+# Get ALL local users (enabled and disabled)
+$AllLocalUsers = Get-LocalUser
+$EnabledUsers = $AllLocalUsers | Where-Object { $_.Enabled -eq $true }
+$DisabledUsers = $AllLocalUsers | Where-Object { $_.Enabled -eq $false }
+
+Write-BlueTeamLog "Found $($AllLocalUsers.Count) total local users ($($EnabledUsers.Count) enabled, $($DisabledUsers.Count) disabled)" "INFO"
 
 # Define default Windows users that should typically exist
 $DefaultWindowsUsers = @(
@@ -395,16 +502,115 @@ $DefaultWindowsUsers = @(
     "WDAGUtilityAccount"
 )
 
-# Combine safe users (includes default + competition users)
+# Combine safe users (includes default + competition + blue team users)
 $AllSafeUsers = $SafeUsers + $DefaultWindowsUsers + $AuthorizedAdmins | Select-Object -Unique
-Write-BlueTeamLog "Protected user list: $($AllSafeUsers -join ', ')" "INFO"
+Write-BlueTeamLog "Protected user list ($($AllSafeUsers.Count) users): $($AllSafeUsers -join ', ')" "INFO"
+Write-BlueTeamLog "" "INFO"
 
-# Remove unauthorized users
-Write-BlueTeamLog "Scanning for unauthorized users..." "INFO"
+# ============================================================================
+# 1.2 - AUDIT PRIVILEGED GROUP MEMBERSHIPS
+# ============================================================================
+Write-BlueTeamLog "Step 1.2: Auditing privileged group memberships..." "INFO"
+
+foreach ($groupName in $PrivilegedGroups) {
+    try {
+        $group = Get-LocalGroup -Name $groupName -ErrorAction SilentlyContinue
+        if (-not $group) { continue }
+        
+        $members = Get-LocalGroupMember -Group $groupName -ErrorAction SilentlyContinue
+        
+        if ($members) {
+            Write-BlueTeamLog "Checking group: $groupName ($($members.Count) members)" "INFO"
+            
+            foreach ($member in $members) {
+                # Extract just the username (remove domain prefix if present)
+                $memberName = $member.Name
+                if ($memberName -like "*\*") {
+                    $memberName = $memberName.Split('\')[-1]
+                }
+                
+                # Check if member is authorized
+                if ($AllSafeUsers -notcontains $memberName) {
+                    Write-BlueTeamLog "  UNAUTHORIZED: $memberName in $groupName" "CRITICAL" -Critical
+                    $GroupViolations += [PSCustomObject]@{
+                        Group = $groupName
+                        User = $memberName
+                        Action = "Removed"
+                    }
+                    
+                    try {
+                        Remove-LocalGroupMember -Group $groupName -Member $member.Name -ErrorAction Stop
+                        Write-BlueTeamLog "  REMOVED: $memberName from $groupName" "REMOVED"
+                        Add-Change "Group Security" "Removed from $groupName" $memberName "Unauthorized group membership"
+                    } catch {
+                        Write-BlueTeamLog "  Failed to remove $memberName from $groupName : $_" "ERROR"
+                    }
+                } else {
+                    Write-BlueTeamLog "  Authorized: $memberName" "INFO"
+                }
+            }
+        }
+    } catch {
+        Write-BlueTeamLog "Could not audit group $groupName : $_" "WARNING"
+    }
+}
+
+Write-BlueTeamLog "Group audit complete. Found $($GroupViolations.Count) unauthorized group memberships" "INFO"
+Write-BlueTeamLog "" "INFO"
+
+# ============================================================================
+# 1.3 - SCAN FOR BLANK PASSWORDS AND SUSPICIOUS SIDS
+# ============================================================================
+Write-BlueTeamLog "Step 1.3: Scanning for blank passwords and analyzing SIDs..." "INFO"
+
 foreach ($user in $AllLocalUsers) {
+    # Check for blank password
+    if ($user.Enabled) {
+        Write-BlueTeamLog "Checking user: $($user.Name)" "INFO"
+        
+        $hasBlankPassword = Test-BlankPassword -Username $user.Name
+        if ($hasBlankPassword) {
+            Write-BlueTeamLog "  CRITICAL: User has BLANK PASSWORD!" "CRITICAL" -Critical
+            $BlankPasswordUsers += $user.Name
+        }
+    }
+    
+    # Analyze SID
+    $sidIssues = Test-SuspiciousSID -User $user
+    if ($sidIssues.Count -gt 0) {
+        Write-BlueTeamLog "  SUSPICIOUS SID detected for $($user.Name):" "WARNING" -Critical
+        foreach ($issue in $sidIssues) {
+            Write-BlueTeamLog "    - $issue" "WARNING"
+        }
+        $SuspiciousSIDUsers += [PSCustomObject]@{
+            Username = $user.Name
+            SID = $user.SID.Value
+            Issues = $sidIssues -join '; '
+            OnSafeList = ($AllSafeUsers -contains $user.Name)
+        }
+    }
+}
+
+Write-BlueTeamLog "Blank password scan complete. Found $($BlankPasswordUsers.Count) users with blank passwords" "INFO"
+Write-BlueTeamLog "SID analysis complete. Found $($SuspiciousSIDUsers.Count) users with suspicious SIDs" "INFO"
+Write-BlueTeamLog "" "INFO"
+
+# ============================================================================
+# 1.4 - REMOVE UNAUTHORIZED USERS
+# ============================================================================
+Write-BlueTeamLog "Step 1.4: Removing unauthorized users..." "INFO"
+
+foreach ($user in $EnabledUsers) {
     if ($AllSafeUsers -notcontains $user.Name) {
         try {
             Write-BlueTeamLog "REMOVING unauthorized user: $($user.Name)" "REMOVED"
+            
+            # Check if this user had SUSPICIOUS SID
+            $wasSuspicious = $SuspiciousSIDUsers | Where-Object { $_.Username -eq $user.Name }
+            if ($wasSuspicious) {
+                Write-BlueTeamLog "  (This user had SUSPICIOUS SID: $($wasSuspicious.Issues))" "WARNING"
+            }
+            
             Remove-LocalUser -Name $user.Name -Confirm:$false
             $RemovedUsers += $user.Name
             Add-Change "User Management" "Removed User" $user.Name "Unauthorized user removed"
@@ -414,6 +620,13 @@ foreach ($user in $AllLocalUsers) {
         }
     } else {
         Write-BlueTeamLog "Keeping safe user: $($user.Name)" "INFO"
+        
+        # If safe user had SUSPICIOUS SID, log it but don't remove
+        $wasSuspicious = $SuspiciousSIDUsers | Where-Object { $_.Username -eq $user.Name }
+        if ($wasSuspicious) {
+            Write-BlueTeamLog "  NOTE: This user has SUSPICIOUS SID but is on safe list (not removed)" "WARNING"
+            Write-BlueTeamLog "  Issues: $($wasSuspicious.Issues)" "WARNING"
+        }
     }
 }
 
@@ -423,10 +636,59 @@ if ($RemovedUsers.Count -gt 0) {
 } else {
     Write-BlueTeamLog "No unauthorized users found" "INFO"
 }
-
-# Create and configure authorized admin users
 Write-BlueTeamLog "" "INFO"
-Write-BlueTeamLog "Configuring authorized admin users..." "INFO"
+
+# ============================================================================
+# 1.5 - RESET ALL USER PASSWORDS
+# ============================================================================
+Write-BlueTeamLog "Step 1.5: Setting passwords for ALL remaining users..." "CRITICAL"
+Write-BlueTeamLog "All user passwords will be set to the configured team password" "INFO"
+
+# Get fresh user list after removals
+$RemainingUsers = Get-LocalUser
+
+$passwordSuccessCount = 0
+$passwordFailCount = 0
+
+foreach ($user in $RemainingUsers) {
+    # Skip disabled built-in accounts that can't have passwords set
+    if ($user.Name -in @('Guest', 'DefaultAccount', 'WDAGUtilityAccount') -and -not $user.Enabled) {
+        Write-BlueTeamLog "Skipping disabled built-in account: $($user.Name)" "INFO"
+        continue
+    }
+    
+    try {
+        $SecurePassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
+        Set-LocalUser -Name $user.Name -Password $SecurePassword -ErrorAction Stop
+        
+        # Special logging for users that had blank passwords
+        if ($BlankPasswordUsers -contains $user.Name) {
+            Write-BlueTeamLog "Password set for $($user.Name) (previously had BLANK PASSWORD)" "SUCCESS"
+        } else {
+            Write-BlueTeamLog "Password set for $($user.Name)" "SUCCESS"
+        }
+        
+        $passwordSuccessCount++
+        Add-Change "User Management" "Password Reset" $user.Name "Password set to team password"
+        
+    } catch {
+        if ($_.Exception.Message -like "*minimum password age*" -or $_.Exception.Message -like "*password policy*") {
+            Write-BlueTeamLog "Cannot reset password for $($user.Name) - minimum password age restriction" "WARNING"
+        } else {
+            Write-BlueTeamLog "Failed to set password for $($user.Name): $_" "ERROR"
+            $passwordFailCount++
+        }
+    }
+}
+
+Write-BlueTeamLog "Password reset complete: $passwordSuccessCount successful, $passwordFailCount failed" "INFO"
+Write-BlueTeamLog "" "INFO"
+
+# ============================================================================
+# 1.6 - CREATE/CONFIGURE AUTHORIZED ADMIN USERS
+# ============================================================================
+Write-BlueTeamLog "Step 1.6: Configuring authorized admin users..." "INFO"
+
 foreach ($adminUser in $AuthorizedAdmins) {
     try {
         # Check if user exists
@@ -439,72 +701,41 @@ foreach ($adminUser in $AuthorizedAdmins) {
             New-LocalUser -Name $adminUser -Password $SecurePassword -FullName "Blue Team Admin" -Description "Authorized Blue Team Administrator" -PasswordNeverExpires:$true
             Add-Change "User Management" "Created User" $adminUser "New authorized admin user"
             Write-BlueTeamLog "Successfully created user: $adminUser" "SUCCESS"
-            
-            # Add to Administrators group
-            $adminGroup = Get-LocalGroup -Name "Administrators"
-            Add-LocalGroupMember -Group "Administrators" -Member $adminUser -ErrorAction SilentlyContinue
-            Write-BlueTeamLog "Added $adminUser to Administrators group" "SUCCESS"
-            Add-Change "User Management" "Admin Rights" $adminUser "Added to Administrators group"
-            
         } else {
-            # User exists - try to reset password
-            Write-BlueTeamLog "User $adminUser exists - attempting password reset..." "INFO"
-            
-            # Test if the password is already set to our target password
-            $testPassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
-            $credential = New-Object System.Management.Automation.PSCredential($adminUser, $testPassword)
-            
-            # Try to validate the credential (this won't work on domain accounts, but that's okay)
-            $passwordAlreadySet = $false
+            Write-BlueTeamLog "User $adminUser already exists (password already set in previous step)" "INFO"
+        }
+        
+        # Ensure user is in Administrators group (idempotent operation)
+        $isMember = Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$adminUser" }
+        
+        if (-not $isMember) {
             try {
-                # This is a best-effort check - if it fails, we'll try to set the password anyway
-                Add-Type -AssemblyName System.DirectoryServices.AccountManagement
-                $contextType = [System.DirectoryServices.AccountManagement.ContextType]::Machine
-                $principalContext = New-Object System.DirectoryServices.AccountManagement.PrincipalContext($contextType)
-                $passwordAlreadySet = $principalContext.ValidateCredentials($adminUser, $SetAllUserPasswords)
+                Add-LocalGroupMember -Group "Administrators" -Member $adminUser -ErrorAction Stop
+                Write-BlueTeamLog "Added $adminUser to Administrators group" "SUCCESS"
+                Add-Change "User Management" "Admin Rights" $adminUser "Added to Administrators group"
             } catch {
-                # If validation fails, assume password needs to be set
-                $passwordAlreadySet = $false
-            }
-            
-            if ($passwordAlreadySet) {
-                Write-BlueTeamLog "Password for $adminUser is already set correctly - skipping password reset" "INFO"
-            } else {
-                # Try to set the password
-                try {
-                    $SecurePassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
-                    Set-LocalUser -Name $adminUser -Password $SecurePassword -ErrorAction Stop
-                    Write-BlueTeamLog "Password reset for user: $adminUser" "SUCCESS"
-                    Add-Change "User Management" "Password Reset" $adminUser "Password updated"
-                } catch {
-                    if ($_.Exception.Message -like "*minimum password age*" -or $_.Exception.Message -like "*password policy*") {
-                        Write-BlueTeamLog "Cannot reset password for $adminUser - minimum password age restriction (script may have been run recently)" "WARNING"
-                        Write-BlueTeamLog "  This is normal if the script was run within the minimum password age period" "INFO"
-                    } else {
-                        Write-BlueTeamLog "Failed to reset password for $adminUser : $_" "ERROR"
-                    }
+                if ($_.Exception.Message -like "*already a member*") {
+                    Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
+                } else {
+                    Write-BlueTeamLog "Failed to add $adminUser to Administrators: $_" "WARNING"
                 }
             }
-            
-            # Ensure user is in Administrators group (idempotent operation)
-            $adminGroup = Get-LocalGroup -Name "Administrators"
-            $isMember = Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$adminUser" }
-            
-            if (-not $isMember) {
-                try {
-                    Add-LocalGroupMember -Group "Administrators" -Member $adminUser -ErrorAction Stop
-                    Write-BlueTeamLog "Added $adminUser to Administrators group" "SUCCESS"
-                    Add-Change "User Management" "Admin Rights" $adminUser "Added to Administrators group"
-                } catch {
-                    if ($_.Exception.Message -like "*already a member*") {
-                        Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
-                    } else {
-                        Write-BlueTeamLog "Failed to add $adminUser to Administrators: $_" "WARNING"
-                    }
+        } else {
+            Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
+        }
+        
+        # Ensure user is in Remote Desktop Users group for competition access
+        try {
+            $rdpGroup = Get-LocalGroup -Name "Remote Desktop Users" -ErrorAction SilentlyContinue
+            if ($rdpGroup) {
+                $isRDPMember = Get-LocalGroupMember -Group "Remote Desktop Users" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$adminUser" }
+                if (-not $isRDPMember) {
+                    Add-LocalGroupMember -Group "Remote Desktop Users" -Member $adminUser -ErrorAction SilentlyContinue
+                    Write-BlueTeamLog "Added $adminUser to Remote Desktop Users group" "SUCCESS"
                 }
-            } else {
-                Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
             }
+        } catch {
+            # Non-critical, continue
         }
         
         # Enable the user account (idempotent)
@@ -519,9 +750,243 @@ foreach ($adminUser in $AuthorizedAdmins) {
     }
 }
 
+Write-BlueTeamLog "" "INFO"
+
+# ============================================================================
+# 1.7 - GENERATE COMPREHENSIVE AUDIT REPORT
+# ============================================================================
+Write-BlueTeamLog "Step 1.7: Generating comprehensive user audit report..." "INFO"
+
+$auditReportPath = "C:\BlueTeam\user-audit-report-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').txt"
+$auditReportDir = Split-Path -Path $auditReportPath -Parent
+if (-not (Test-Path $auditReportDir)) {
+    New-Item -ItemType Directory -Path $auditReportDir -Force | Out-Null
+}
+
+# Collect detailed information for each user
+Write-BlueTeamLog "Collecting detailed user information..." "INFO"
+
+foreach ($user in $RemainingUsers) {
+    try {
+        # Get user groups
+        $userGroups = Get-UserGroups -Username $user.Name
+        
+        # Determine if user had issues
+        $hadBlankPassword = $BlankPasswordUsers -contains $user.Name
+        $suspiciousSID = $SuspiciousSIDUsers | Where-Object { $_.Username -eq $user.Name }
+        $isOnSafeList = $AllSafeUsers -contains $user.Name
+        $wasInViolation = ($GroupViolations | Where-Object { $_.User -eq $user.Name }).Count -gt 0
+        
+        # Get last logon (if available)
+        $lastLogon = "Never"
+        try {
+            $userObj = Get-LocalUser -Name $user.Name
+            if ($userObj.LastLogon) {
+                $lastLogon = $userObj.LastLogon.ToString("yyyy-MM-dd HH:mm:ss")
+            }
+        } catch {}
+        
+        # Build security status
+        $securityStatus = "SECURE"
+        $securityIssues = @()
+        
+        if ($hadBlankPassword) {
+            $securityIssues += "Had blank password (now fixed)"
+        }
+        if ($suspiciousSID) {
+            $securityIssues += "SUSPICIOUS SID: $($suspiciousSID.Issues)"
+        }
+        if ($wasInViolation) {
+            $securityIssues += "Was in unauthorized groups (removed)"
+        }
+        if (-not $isOnSafeList) {
+            $securityIssues += "NOT on safe list"
+        }
+        
+        if ($securityIssues.Count -gt 0) {
+            $securityStatus = "WARNING"
+        }
+        
+        $UserAuditData += [PSCustomObject]@{
+            Username = $user.Name
+            SID = $user.SID.Value
+            Enabled = $user.Enabled
+            Description = $user.Description
+            LastLogon = $lastLogon
+            PasswordLastSet = if ($user.PasswordLastSet) { $user.PasswordLastSet.ToString("yyyy-MM-dd HH:mm:ss") } else { "Never" }
+            PasswordNeverExpires = $user.PasswordNeverExpires
+            PasswordRequired = $user.PasswordRequired
+            AccountLocked = $user.LockoutTime -ne $null
+            Groups = ($userGroups -join ', ')
+            GroupCount = $userGroups.Count
+            HadBlankPassword = $hadBlankPassword
+            SuspiciousSID = if ($suspiciousSID) { "YES" } else { "NO" }
+            SIDIssues = if ($suspiciousSID) { $suspiciousSID.Issues } else { "None" }
+            OnSafeList = $isOnSafeList
+            SecurityStatus = $securityStatus
+            SecurityIssues = if ($securityIssues.Count -gt 0) { $securityIssues -join '; ' } else { "None" }
+        }
+    } catch {
+        Write-BlueTeamLog "Failed to collect data for user $($user.Name): $_" "WARNING"
+    }
+}
+
+# Build audit report
+$auditReport = @"
+================================================================================
+                      USER ACCOUNT AUDIT REPORT
+================================================================================
+Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Hostname: $hostname
+Script Version: 2.2-CDT
+Script Run: #$scriptRunCount
+
+================================================================================
+                           SUMMARY STATISTICS
+================================================================================
+Total Users Found:                $($AllLocalUsers.Count)
+  - Enabled:                      $($EnabledUsers.Count)
+  - Disabled:                     $($DisabledUsers.Count)
+
+Safe/Protected Users:             $($AllSafeUsers.Count)
+Unauthorized Users Removed:       $($RemovedUsers.Count)
+Users Remaining After Cleanup:    $($RemainingUsers.Count)
+
+Security Issues Detected:
+  - Blank Passwords Found:        $($BlankPasswordUsers.Count)
+  - Suspicious SIDs Found:        $($SuspiciousSIDUsers.Count)
+  - Unauthorized Group Members:   $($GroupViolations.Count)
+
+Password Resets:
+  - Successful:                   $passwordSuccessCount
+  - Failed:                       $passwordFailCount
+
+================================================================================
+                        USERS WITH BLANK PASSWORDS
+================================================================================
+"@
+
+if ($BlankPasswordUsers.Count -gt 0) {
+    foreach ($blankUser in $BlankPasswordUsers) {
+        $auditReport += "`n[CRITICAL] $blankUser - PASSWORD HAS BEEN RESET"
+    }
+} else {
+    $auditReport += "`nNo users with blank passwords detected."
+}
+
+$auditReport += "`n`n"
+$auditReport += @"
+================================================================================
+                        SUSPICIOUS SID DETECTIONS
+================================================================================
+"@
+
+if ($SuspiciousSIDUsers.Count -gt 0) {
+    foreach ($suspUser in $SuspiciousSIDUsers) {
+        $auditReport += "`n"
+        $auditReport += "User: $($suspUser.Username)`n"
+        $auditReport += "  SID: $($suspUser.SID)`n"
+        $auditReport += "  Issues: $($suspUser.Issues)`n"
+        $auditReport += "  On Safe List: $(if ($suspUser.OnSafeList) { 'YES (not removed)' } else { 'NO (removed if found)' })`n"
+    }
+} else {
+    $auditReport += "`nNo suspicious SIDs detected."
+}
+
+$auditReport += "`n`n"
+$auditReport += @"
+================================================================================
+                     UNAUTHORIZED GROUP MEMBERSHIPS
+================================================================================
+"@
+
+if ($GroupViolations.Count -gt 0) {
+    foreach ($violation in $GroupViolations) {
+        $auditReport += "`n[REMOVED] User '$($violation.User)' from group '$($violation.Group)'"
+    }
+} else {
+    $auditReport += "`nNo unauthorized group memberships detected."
+}
+
+$auditReport += "`n`n"
+$auditReport += @"
+================================================================================
+                       DETAILED USER INFORMATION
+================================================================================
+"@
+
+foreach ($userData in $UserAuditData) {
+    $auditReport += "`n"
+    $auditReport += "----------------------------------------`n"
+    $auditReport += "USERNAME: $($userData.Username)`n"
+    $auditReport += "----------------------------------------`n"
+    $auditReport += "SID:                    $($userData.SID)`n"
+    $auditReport += "Enabled:                $($userData.Enabled)`n"
+    $auditReport += "Description:            $($userData.Description)`n"
+    $auditReport += "Last Logon:             $($userData.LastLogon)`n"
+    $auditReport += "Password Last Set:      $($userData.PasswordLastSet)`n"
+    $auditReport += "Password Never Expires: $($userData.PasswordNeverExpires)`n"
+    $auditReport += "Password Required:      $($userData.PasswordRequired)`n"
+    $auditReport += "Account Locked:         $($userData.AccountLocked)`n"
+    $auditReport += "Groups ($($userData.GroupCount)):         $($userData.Groups)`n"
+    $auditReport += "Had Blank Password:     $($userData.HadBlankPassword)`n"
+    $auditReport += "Suspicious SID:         $($userData.SuspiciousSID)`n"
+    if ($userData.SuspiciousSID -eq "YES") {
+        $auditReport += "  SID Issues:           $($userData.SIDIssues)`n"
+    }
+    $auditReport += "On Safe List:           $($userData.OnSafeList)`n"
+    $auditReport += "Security Status:        $($userData.SecurityStatus)`n"
+    if ($userData.SecurityIssues -ne "None") {
+        $auditReport += "Security Issues:        $($userData.SecurityIssues)`n"
+    }
+    $auditReport += "`n"
+    
+    if ($userData.SecurityStatus -eq "SECURE") {
+        $auditReport += "[✓] SECURE`n"
+    } else {
+        $auditReport += "[!] REVIEW REQUIRED`n"
+    }
+}
+
+$auditReport += "`n"
+$auditReport += @"
+================================================================================
+                         REMOVED USERS (UNAUTHORIZED)
+================================================================================
+"@
+
+if ($RemovedUsers.Count -gt 0) {
+    foreach ($removedUser in $RemovedUsers) {
+        $auditReport += "`n[REMOVED] $removedUser"
+    }
+} else {
+    $auditReport += "`nNo unauthorized users were removed."
+}
+
+$auditReport += "`n`n"
+$auditReport += @"
+================================================================================
+                              END OF REPORT
+================================================================================
+"@
+
+# Write audit report to file
+$auditReport | Set-Content -Path $auditReportPath -Force
+Write-BlueTeamLog "Audit report generated: $auditReportPath" "SUCCESS"
+Add-Change "User Management" "Audit Report" "Generated" "Comprehensive user audit completed"
+
+Write-BlueTeamLog "" "INFO"
+Write-BlueTeamLog "PHASE 1 COMPLETE: User account management finished" "SUCCESS"
+Write-BlueTeamLog "  - Users removed: $($RemovedUsers.Count)" "INFO"
+Write-BlueTeamLog "  - Blank passwords fixed: $($BlankPasswordUsers.Count)" "INFO"
+Write-BlueTeamLog "  - Suspicious SIDs found: $($SuspiciousSIDUsers.Count)" "INFO"
+Write-BlueTeamLog "  - Group violations: $($GroupViolations.Count)" "INFO"
+Write-BlueTeamLog "  - Passwords reset: $passwordSuccessCount" "INFO"
+Write-BlueTeamLog "  - Audit report: $auditReportPath" "INFO"
+Write-BlueTeamLog "" "INFO"
+
 # Disable Guest account (security best practice)
 # NOTE: Guest is a default Windows account, not a competition user
-Write-BlueTeamLog "" "INFO"
 Write-BlueTeamLog "Checking Guest account status..." "INFO"
 try {
     $guestAccount = Get-LocalUser -Name "Guest" -ErrorAction SilentlyContinue
