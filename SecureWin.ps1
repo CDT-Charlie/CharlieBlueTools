@@ -50,6 +50,15 @@
 .EXAMPLE
     # Run the script (after configuring variables above)
     .\BlueTeam-Hardening-Script.ps1
+
+.COMPATABILITY
+    Works with:
+        Windows Server 2025: CONFIRMED
+        Windows Server 2022: CONFIRMED
+        Windows Server 2019: CONFIRMED
+        Windows Server 2016: CONFIRMED
+        Windows 11: CONFIRMED
+        Windows 10: CONFIRMED
 #>
 
 # ============================================================================
@@ -64,6 +73,7 @@ $SafeUsers = @(
     "DefaultAccount",
     "Guest",
     "WDAGUtilityAccount",
+    "cyberrange",
     
     # Local Users (from competition packet)
     "twilight",
@@ -103,7 +113,8 @@ $SafeUsers = @(
 $AuthorizedAdmins = @(
     "blueteam1",
     "blueteam2",
-    "blueteam3"
+    "blueteam3",
+    "cyberrange"
     # Add your blue team members here
 )
 
@@ -111,7 +122,7 @@ $AuthorizedAdmins = @(
 # Keep it strong - competition default is FriendshipIsMagic0!
 # NOTE: Use only these special characters: ! @ $ % ^ & * ( ) - _ = + [ ] { } ; : , . ?
 # The # symbol can cause issues with Windows password complexity
-$SetAllUserPasswords = "BlueDefender2026!Secure@CDT"
+$SetAllUserPasswords = "FriendshipIsMagic0!"
 
 # NETWORK SECURITY - CDT Competition Network
 # IP addresses that should NEVER be blocked (scoring engine, gray team, jumpboxes)
