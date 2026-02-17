@@ -56,6 +56,7 @@
         Windows Server 2025: CONFIRMED
         Windows Server 2022: CONFIRMED
         Windows Server 2019: CONFIRMED
+        Windows Server 2016: CONFIRMED
 #>
 
 # ============================================================================
