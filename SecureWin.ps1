@@ -64,6 +64,7 @@ $SafeUsers = @(
     "DefaultAccount",
     "Guest",
     "WDAGUtilityAccount",
+    "cyberrange",
     
     # Local Users (from competition packet)
     "twilight",
@@ -103,7 +104,8 @@ $SafeUsers = @(
 $AuthorizedAdmins = @(
     "blueteam1",
     "blueteam2",
-    "blueteam3"
+    "blueteam3",
+    "cyberrange"
     # Add your blue team members here
 )
 
@@ -111,7 +113,7 @@ $AuthorizedAdmins = @(
 # Keep it strong - competition default is FriendshipIsMagic0!
 # NOTE: Use only these special characters: ! @ $ % ^ & * ( ) - _ = + [ ] { } ; : , . ?
 # The # symbol can cause issues with Windows password complexity
-$SetAllUserPasswords = "BlueDefender2026!Secure@CDT"
+$SetAllUserPasswords = "FriendshipIsMagic0!"
 
 # NETWORK SECURITY - CDT Competition Network
 # IP addresses that should NEVER be blocked (scoring engine, gray team, jumpboxes)
