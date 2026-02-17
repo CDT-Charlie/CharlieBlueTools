@@ -57,8 +57,8 @@
         Windows Server 2022: CONFIRMED
         Windows Server 2019: CONFIRMED
         Windows Server 2016: CONFIRMED
-    Partial:
-        Windows 11: PARTIAL - Must (CTRL+C) to skip past "Backdoor Detection"
+        Windows 11: CONFIRMED
+        Windows 10: CONFIRMED
 #>
 
 # ============================================================================
