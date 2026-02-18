@@ -60,6 +60,129 @@
         Windows 11: CONFIRMED
         Windows 10: CONFIRMED
 #>
+[CmdletBinding()]
+param(
+    [switch]$Help,
+
+    # Run all phases (same as no args)
+    [switch]$All,
+
+    # Run specific phases via individual switches
+    [switch]$Phase1,
+    [switch]$Phase2,
+    [switch]$Phase3,
+    [switch]$Phase4,
+    [switch]$Phase5,
+    [switch]$Phase6,
+    [switch]$Phase7,
+    [switch]$Phase8,
+
+    # Run specific phases via a list (e.g., -Phases 1,3,8)
+    [int[]]$Phases
+)
+
+# Display help menu
+if ($Help) {
+    Write-Host @"
+
+================================================================================
+                    SecureWin.ps1 - Windows Hardening Script
+                    CDT Team Alpha - Spring 2026
+================================================================================
+
+USAGE:
+    .\SecureWin.ps1 [OPTIONS]
+
+OPTIONS:
+    -Help          Display this help menu
+    -All           Run ALL phases (same as no args)
+    -Phase1        User Account Management (Enhanced)
+    -Phase2        Password Policy Hardening
+    -Phase3        Firewall Hardening
+    -Phase4        SSH Hardening
+    -Phase5        Network Security
+    -Phase6        Backdoor Detection
+    -Phase7        System Hardening
+    -Phase8        Audit Logging Configuration
+    -Phases        Run selected phases by number (e.g., -Phases 1,3,8)
+
+DEFAULT:
+    (no args)      Run ALL phases
+
+EXAMPLES:
+    .\SecureWin.ps1
+    .\SecureWin.ps1 -All
+    .\SecureWin.ps1 -Phase1
+    .\SecureWin.ps1 -Phase1 -Phase3 -Phase8
+    .\SecureWin.ps1 -Phases 1,3,8
+    .\SecureWin.ps1 -Help
+
+================================================================================
+"@ -ForegroundColor Cyan
+    exit 0
+}
+
+# Determine which phases to run
+$noArgs = (-not $PSBoundParameters.Count)
+
+# If -All is supplied or no args are supplied, run everything
+if ($All -or $noArgs) {
+    $RunPhase1 = $true
+    $RunPhase2 = $true
+    $RunPhase3 = $true
+    $RunPhase4 = $true
+    $RunPhase5 = $true
+    $RunPhase6 = $true
+    $RunPhase7 = $true
+    $RunPhase8 = $true
+
+    $RunningIndividualPhase = $false
+    $SelectedPhases = @(1,2,3,4,5,6,7,8)
+} else {
+    # Build selected phase list from -Phases and -PhaseX switches (can be mixed)
+    $SelectedPhases = @()
+
+    if ($Phases) {
+        foreach ($p in $Phases) { $SelectedPhases += $p }
+    }
+    if ($Phase1) { $SelectedPhases += 1 }
+    if ($Phase2) { $SelectedPhases += 2 }
+    if ($Phase3) { $SelectedPhases += 3 }
+    if ($Phase4) { $SelectedPhases += 4 }
+    if ($Phase5) { $SelectedPhases += 5 }
+    if ($Phase6) { $SelectedPhases += 6 }
+    if ($Phase7) { $SelectedPhases += 7 }
+    if ($Phase8) { $SelectedPhases += 8 }
+
+    # Normalize: unique + sorted
+    $SelectedPhases = $SelectedPhases | Where-Object { $_ -ne $null } | ForEach-Object { [int]$_ } | Sort-Object -Unique
+
+    # Validate range
+    $invalid = $SelectedPhases | Where-Object { $_ -lt 1 -or $_ -gt 8 }
+    if ($invalid) {
+        Write-Host "ERROR: Invalid phase number(s): $($invalid -join ', '). Valid phases are 1-8." -ForegroundColor Red
+        exit 1
+    }
+
+    # Set run flags
+    $RunPhase1 = $SelectedPhases -contains 1
+    $RunPhase2 = $SelectedPhases -contains 2
+    $RunPhase3 = $SelectedPhases -contains 3
+    $RunPhase4 = $SelectedPhases -contains 4
+    $RunPhase5 = $SelectedPhases -contains 5
+    $RunPhase6 = $SelectedPhases -contains 6
+    $RunPhase7 = $SelectedPhases -contains 7
+    $RunPhase8 = $SelectedPhases -contains 8
+
+    $RunningIndividualPhase = $true
+
+    # Banner
+    $phaseLabel = ($SelectedPhases -join ", ")
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "RUNNING SELECTED PHASE(S): $phaseLabel" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+}
 
 # ============================================================================
 # CRITICAL COMPETITION VARIABLES - CDT TEAM ALPHA SPRING 2026
@@ -186,7 +309,18 @@ $DisableSuspiciousServices = $true       # Disable suspicious services
 $VerboseLogging = $true                  # Enable verbose logging to console
 $AuditLogSize = 2048MB                   # Maximum size for Security event log
 $EnableAdvancedAuditing = $true          # Enable detailed audit policies
-$LogFilePath = "C:\BlueTeam\Logs\Hardening-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').log"
+# Log file path (phase-aware)
+if ($RunningIndividualPhase) {
+    $phaseSuffix = ""
+    if ($SelectedPhases) {
+        $phaseSuffix = "Phases-" + ($SelectedPhases -join "-") + "-"
+    } else {
+        $phaseSuffix = "Phase-"
+    }
+    $LogFilePath = "C:\BlueTeam\Logs\Hardening-$phaseSuffix$(Get-Date -Format yyyy-MM-dd-HHmmss).log"
+} else {
+    $LogFilePath = "C:\BlueTeam\Logs\Hardening-$(Get-Date -Format yyyy-MM-dd-HHmmss).log"
+}
 
 # PASSWORD POLICY
 $MinPasswordLength = 16                  # Minimum password length
@@ -377,6 +511,7 @@ if ($complianceIssues.Count -eq 0) {
 Write-BlueTeamLog "" "INFO"
 
 # ============================================================================
+if ($RunPhase1) {
 # 1. USER ACCOUNT MANAGEMENT AND CLEANUP (ENHANCED)
 # ============================================================================
 Write-BlueTeamLog "============================================================" "INFO"
@@ -942,7 +1077,7 @@ foreach ($userData in $UserAuditData) {
     $auditReport += "`n"
     
     if ($userData.SecurityStatus -eq "SECURE") {
-        $auditReport += "[✓] SECURE`n"
+        $auditReport += "[OK] SECURE`n"
     } else {
         $auditReport += "[!] REVIEW REQUIRED`n"
     }
@@ -1002,6 +1137,8 @@ try {
 }
 
 # ============================================================================
+}
+if ($RunPhase2) {
 # 2. PASSWORD POLICY HARDENING
 # ============================================================================
 Write-BlueTeamLog "" "INFO"
@@ -1045,6 +1182,8 @@ try {
 }
 
 # ============================================================================
+}
+if ($RunPhase3) {
 # 3. FIREWALL HARDENING
 # ============================================================================
 Write-BlueTeamLog "" "INFO"
@@ -1208,6 +1347,8 @@ foreach ($ipRange in $SafeIPRanges) {
 }
 
 # ============================================================================
+}
+if ($RunPhase4) {
 # 4. SSH HARDENING
 # ============================================================================
 Write-BlueTeamLog "" "INFO"
@@ -1383,6 +1524,8 @@ Subsystem       sftp    sftp-server.exe
 }
 
 # ============================================================================
+}
+if ($RunPhase5) {
 # 5. NETWORK SECURITY HARDENING
 # ============================================================================
 Write-BlueTeamLog "" "INFO"
@@ -1526,6 +1669,8 @@ try {
 # }
 
 # ============================================================================
+}
+if ($RunPhase6) {
 # 6. BACKDOOR AND PERSISTENCE DETECTION
 # ============================================================================
 Write-BlueTeamLog "" "INFO"
@@ -1711,6 +1856,8 @@ if ($ScanForBackdoors) {
 }
 
 # ============================================================================
+}
+if ($RunPhase7) {
 # 7. SYSTEM HARDENING
 # ============================================================================
 Write-BlueTeamLog "" "INFO"
@@ -1925,6 +2072,8 @@ try {
 }
 
 # ============================================================================
+}
+if ($RunPhase8) {
 # 8. AUDIT LOGGING
 # ============================================================================
 Write-BlueTeamLog "" "INFO"
@@ -2022,6 +2171,8 @@ try {
 }
 
 # ============================================================================
+}
+if (-not $RunningIndividualPhase) {
 # 9. FINAL REPORT GENERATION
 # ============================================================================
 Write-BlueTeamLog "" "INFO"
@@ -2196,4 +2347,13 @@ if ($shouldRestart) {
     # Force restart (cannot be stopped)
     Start-Sleep -Seconds 1
     Restart-Computer -Force
+}
+} else {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "Individual Phase Complete" -ForegroundColor Green
+    Write-Host "Phase(s) executed successfully." -ForegroundColor Green
+    Write-Host "Check log file: $LogFilePath" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host ""
 }
