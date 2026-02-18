@@ -1,13 +1,13 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Blue Team Windows Hardening Script for CDT Competition - Team Alpha Spring 2026
+    Blue Team Windows Hardening Script for CDT Competition - Team Charlie Spring 2026
 .DESCRIPTION
     Comprehensive hardening script designed for Blue vs Red team competitions.
     Removes unauthorized users, hardens SSH, configures firewall, and locks down the system
     while preserving competition infrastructure through whitelisting.
     
-    COMPETITION: CDT Team Alpha Spring 2026
+    COMPETITION: CDT Team Charlie Spring 2026
     DOMAIN: mlp.local
     DEFAULT PASSWORD: FriendshipIsMagic0!
     SCORING ENGINE: https://172.20.0.100:443
@@ -15,17 +15,17 @@
 .BEFORE_RUNNING
     **REQUIRED CONFIGURATION - EDIT THESE VARIABLES:**
     
-    1. $AuthorizedAdmins (Line ~48) - Add your blue team usernames
+    1. $AuthorizedAdmins - Add your blue team usernames
        Example: @("blueteam1", "blueteam2", "blueteam3")
     
     2. $SetAllUserPasswords (Line ~56) - Change to YOUR secure password
        Example: "YourTeamPassword2026!Secure"
        NOTE: Avoid using # symbol - use ! @ $ % ^ & * instead
     
-    3. $SafeIPAddresses (Line ~61) - Verify scoring engine/jumpbox IPs
+    3. $SafeIPAddresses - Verify scoring engine/jumpbox IPs
        (Default values should work for CDT competition)
     
-    **OPTIONAL:** Review $SafeUsers (Line ~27) to ensure all competition users are protected
+    **OPTIONAL:** Review $SafeUsers to ensure all competition users are protected
     
 .CRITICAL_RULES
     Rule 9: DO NOT disable any valid user accounts listed in the packet
@@ -49,7 +49,7 @@
     
 .EXAMPLE
     # Run the script (after configuring variables above)
-    .\BlueTeam-Hardening-Script.ps1
+    .\SecureWin.ps1
 
 .COMPATABILITY
     Works with:
