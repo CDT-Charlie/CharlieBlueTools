@@ -87,7 +87,7 @@ if ($Help) {
 
 ================================================================================
                     SecureWin.ps1 - Windows Hardening Script
-                    CDT Team Alpha - Spring 2026
+                    CDT Team Charlie - Spring 2026
 ================================================================================
 
 USAGE:
@@ -185,7 +185,7 @@ if ($All -or $noArgs) {
 }
 
 # ============================================================================
-# CRITICAL COMPETITION VARIABLES - CDT TEAM ALPHA SPRING 2026
+# CRITICAL COMPETITION VARIABLES - CDT TEAM CHARLIE SPRING 2026
 # ============================================================================
 
 # USER MANAGEMENT - CDT Competition Users (DO NOT REMOVE OR DISABLE!)
@@ -428,7 +428,7 @@ function Add-Change {
 
 Write-BlueTeamLog "============================================================" "INFO"
 Write-BlueTeamLog "BLUE TEAM WINDOWS HARDENING SCRIPT - COMPETITION MODE" "CRITICAL"
-Write-BlueTeamLog "CDT TEAM ALPHA - SPRING 2026" "CRITICAL"
+Write-BlueTeamLog "CDT TEAM CHARLIE - SPRING 2026" "CRITICAL"
 Write-BlueTeamLog "============================================================" "INFO"
 Write-BlueTeamLog "Script started at: $ScriptStartTime" "INFO"
 Write-BlueTeamLog "Script run count: $scriptRunCount" "INFO"
