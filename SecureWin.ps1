@@ -18,7 +18,7 @@
     1. $AuthorizedAdmins - Add your blue team usernames
        Example: @("blueteam1", "blueteam2", "blueteam3")
     
-    2. $SetAllUserPasswords (Line ~56) - Change to YOUR secure password
+    2. $SetAllUserPasswords - Change to YOUR secure password
        Example: "YourTeamPassword2026!Secure"
        NOTE: Avoid using # symbol - use ! @ $ % ^ & * instead
     
