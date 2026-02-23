@@ -7,29 +7,21 @@
     Removes unauthorized users, hardens SSH, configures firewall, and locks down the system
     while preserving competition infrastructure through whitelisting.
     
-    COMPETITION: CDT Team Charlie Spring 2026
-    DOMAIN: mlp.local
-    DEFAULT PASSWORD: FriendshipIsMagic0!
-    SCORING ENGINE: https://172.20.0.100:443
-    
 .BEFORE_RUNNING
     **REQUIRED CONFIGURATION - EDIT THESE VARIABLES:**
     
-    1. $AuthorizedAdmins - Add your blue team usernames
-       Example: @("blueteam1", "blueteam2", "blueteam3")
+    1. $AuthorizedAdmins - Add your blue team usernames (I did this for you already!)
     
-    2. $SetAllUserPasswords - Change to YOUR secure password
-       Example: "YourTeamPassword2026!Secure"
-       NOTE: Avoid using # symbol - use ! @ $ % ^ & * instead
+    2. $SetAllUserPasswords - Change to YOUR secure password @(line 251)
     
-    3. $SafeIPAddresses - Verify scoring engine/jumpbox IPs
-       (Default values should work for CDT competition)
+    3. $SafeIPAddresses - Verify scoring engine/jumpbox IPs (Should be done already as well!)
     
     **OPTIONAL:** Review $SafeUsers to ensure all competition users are protected
     
 .CRITICAL_RULES
     Rule 9: DO NOT disable any valid user accounts listed in the packet
-    Rule 10: DO NOT disable SSH on Linux or RDP on Windows
+    Rule 10: DO NOT disable RDP on Windows (SSH on Windows is NOT required - remove it!)
+    Rule 15: Blue Team may request up to 3 host reverts per competition day
     Rule 7: DO NOT block entire subnets (no subnet blocking)
     Rule 14: Password changes limited to 3 per host per comp session
     Rule 5: DO NOT modify artifacts with "greyteam" in their name
@@ -41,11 +33,9 @@
     Workstations: 3x Windows 10, 3x Ubuntu 24.04
     
 .NOTES
-    Author: Blue Team Security Script - CDT Competition Edition
-    Version: 2.2-CDT
+    Author: Christian Tomassetti + Claude AI
     Requires: PowerShell 5.1+ and Administrator privileges
-    Competition Ready: Yes
-    Last Updated: February 2026
+    Last Updated: 02/23/2026
     
 .EXAMPLE
     # Run the script (after configuring variables above)
@@ -88,26 +78,37 @@ if ($Help) {
 ================================================================================
                     SecureWin.ps1 - Windows Hardening Script
                     CDT Team Charlie - Spring 2026
+                    Time to lock out the Red... For good :)
 ================================================================================
 
 USAGE:
     .\SecureWin.ps1 [OPTIONS]
 
 OPTIONS:
-    -Help          Display this help menu
-    -All           Run ALL phases (same as no args)
-    -Phase1        User Account Management (Enhanced)
-    -Phase2        Password Policy Hardening
-    -Phase3        Firewall Hardening
-    -Phase4        SSH Hardening
-    -Phase5        Network Security
-    -Phase6        Backdoor Detection
-    -Phase7        System Hardening
-    -Phase8        Audit Logging Configuration
-    -Phases        Run selected phases by number (e.g., -Phases 1,3,8)
+    -Help          Display this help menu               - See how to use the script as a multitool!
+
+    -All           Run ALL phases (same as no args)     - Run the entire script (FIRST RUN THIS!)
+
+    -Phase1        User Account Management (Enhanced)   - Handle unwanted users and change passwords!
+
+    -Phase2        Password Policy Hardening            - Ensures passwords are strong and reliable!
+
+    -Phase3        Firewall Hardening                   - Removes default vulnerable rules + adds allow rules!
+
+    -Phase4        SSH Removal                          - Nukes SSH on Windows!
+
+    -Phase5        Network Security                     - Disables vulnerable protocols!
+
+    -Phase6        Backdoor Detection                   - Checks for sneaky persistence!
+
+    -Phase7        System Hardening                     - Hardens/disables vulnerable Windows features!
+
+    -Phase8        Audit Logging Configuration          - Enables advanced auditing!
+
+    -Phases        Run selected phases by number        - e.g., "./SecureWin -Phases 1,3,8"
 
 DEFAULT:
-    (no args)      Run ALL phases
+    (no args)      Run ALL phases                       - Runs the entire script by default!
 
 EXAMPLES:
     .\SecureWin.ps1
@@ -193,10 +194,9 @@ if ($All -or $noArgs) {
 $SafeUsers = @(
     # Windows Default Users
     "Administrator",
-    "DefaultAccount",
-    "Guest",
-    "WDAGUtilityAccount",
-    "cyberrange",
+    "DefaultAccount", # should be disabled (if not disable it)
+    "Guest", # should be disabled (if not disable it)
+    "WDAGUtilityAccount", # should be disabled (if not disable it)
     
     # Local Users (from competition packet)
     "twilight",
@@ -210,7 +210,7 @@ $SafeUsers = @(
     "bigmac",
     "mayormare",
     "shiningarmor",
-    "cadence",
+    "cadance",
     
     # Domain Users (from competition packet)
     "spike",
@@ -224,28 +224,31 @@ $SafeUsers = @(
     "celestia",
     "discord",
     "luna",
-    "starswirlthebearded",
+    "starswirl",
     
     # Gray Team (anything with "greyteam" per Rule 3 & 5)
     "greyteam",
-    "grayteam"
+    "grayteam",
+    "gray_team",
+    "grey_team",
+    "scoring" # Added scoring user to ensure scoring is not interupted
 )
 
 # List of users that should have admin access and password reset
 # These are YOUR blue team users - add them here
 $AuthorizedAdmins = @(
-    "blueteam1",
-    "blueteam2",
-    "blueteam3",
-    "cyberrange"
+    "blueadmin"
     # Add your blue team members here
 )
 
 # Password to set for all authorized blue team users (CHANGE THIS BEFORE RUNNING!)
-# Keep it strong - competition default is FriendshipIsMagic0!
 # NOTE: Use only these special characters: ! @ $ % ^ & * ( ) - _ = + [ ] { } ; : , . ?
 # The # symbol can cause issues with Windows password complexity
-$SetAllUserPasswords = "FriendshipIsMagic0!"
+
+# IMPORTANT: This password must NOT contain 3+ consecutive characters from any authorized admin username.
+# Windows complexity policy will reject the password at user-creation time if it does.
+# For "blueadmin", avoid these substrings: blu, lue, uea, ead, adm, dmi, min
+$SetAllUserPasswords = "<CHANGE-PASSWORD-HERE-BEFORE-RUNNING>" # DO NOT SHARE THIS PASSWORD WITH ANYONE!
 
 # NETWORK SECURITY - CDT Competition Network
 # IP addresses that should NEVER be blocked (scoring engine, gray team, jumpboxes)
@@ -268,35 +271,30 @@ $SafeIPAddresses = @(
 # IMPORTANT: Per Rule 7, do NOT block entire subnets
 # These ranges are for ALLOW rules only, not BLOCK rules
 $SafeIPRanges = @(
-    "172.20.0.0/24",     # Management/Competition network (scoring, jumpboxes)
     "10.0.10.0/24",      # Core Subnet (scored services)
     "10.0.20.0/24",      # DMZ Subnet (scored services)
     "10.0.30.0/24"       # Internal Subnet (workstations)
 )
 
 # SSH CONFIGURATION
-# CRITICAL: Per Rule 10 - Teams may NOT disable SSH on Linux or RDP on Windows
-$EnableSSHHardening = $true              # Enable SSH hardening (but not disable)
-$SSHPort = 22                            # SSH port (change if non-standard)
-$AllowSSHPasswordAuth = $false           # Disable password auth (use keys only)
-$SSHMaxAuthTries = 3                     # Maximum authentication attempts
-$SSHLoginGraceTime = 30                  # Seconds to complete authentication
+# Rule 10: SSH is NOT required on Windows - if found it must be REMOVED and BLOCKED.
+# Only RDP must remain open on Windows machines.
+# (SSH hardening is handled in Phase 4 - it will nuke SSH entirely if found)
 
 # FIREWALL CONFIGURATION
 $BlockAllInboundByDefault = $true        # Block all inbound except allowed
-# Per competition topology - these ports are critical for scored services
-$AllowedInboundPorts = @(
-    22,    # SSH (required per Rule 10)
-    80,    # HTTP (Apache2, IIS, Nginx scored services)
-    443,   # HTTPS (IIS scored service)
-    3389,  # RDP (required per Rule 10)
-    445,   # SMB (scored service on appleloosa)
-    3306,  # MySQL/MariaDB (scored service on seaddle)
-    1433,  # MSSQL (scored service on manehatten)
-    21,    # FTP (vsftpd scored service on crystal-empire)
-    631,   # CUPS (scored service on trotsylvania)
-    6667   # IRC (scored service on everfree-forest)
-)
+# Port 3389 (RDP) is always opened - it is required per Rule 10.
+# All other service ports are determined interactively in Phase 3 based on
+# which scored service is running on THIS host. Do NOT open ports for services
+# that are not running here - that is an unnecessary attack surface.
+#
+# Windows service -> ports mapping (for reference):
+#   Active Directory : 88 (Kerberos), 135 (RPC), 389 (LDAP), 445 (SMB),
+#                      636 (LDAPS), 3268 (GC), 3269 (GC SSL), 49152-65535 (RPC dynamic)
+#   MSSQL            : 1433
+#   IIS              : 80, 443
+#   SMB              : 445
+#   Workstation      : (no additional service port - RDP only)
 $LogDroppedPackets = $true               # Log all dropped packets
 $LogAllowedConnections = $true           # Log allowed connections
 
@@ -333,7 +331,7 @@ $AccountLockoutDuration = 30             # Lockout duration in minutes
 # SYSTEM HARDENING
 $DisableSMBv1 = $true                    # Disable SMBv1 (critical!)
 $DisableRDP = $false                     # CRITICAL: Per Rule 10 - CANNOT disable RDP!
-$EnableWindowsDefender = $true           # Enable Windows Defender
+$EnableWindowsDefender = $false           # Disable Windows Defender - enable is not allowed!
 $DisableUSBStorage = $false              # Disable USB storage devices
 $DisablePowerShellV2 = $true             # Disable PowerShell v2
 
@@ -447,12 +445,12 @@ Write-BlueTeamLog "============================================================"
 $configWarnings = @()
 
 # Check if default password was changed
-if ($SetAllUserPasswords -eq "BlueDefender2026!Secure@CDT") {
+if ($SetAllUserPasswords -eq "FriendshipIsMagic0!") {
     $configWarnings += "Default password detected - you should change `$SetAllUserPasswords to your team password!"
 }
 
 # Check if default admin users are still set
-if ($AuthorizedAdmins -contains "blueteam1" -and $AuthorizedAdmins.Count -eq 3) {
+if ($AuthorizedAdmins -contains "blueadmin" -and $AuthorizedAdmins.Count -eq 3) {
     $configWarnings += "Default admin usernames detected - you should customize `$AuthorizedAdmins with your team members!"
 }
 
@@ -637,9 +635,16 @@ $DefaultWindowsUsers = @(
     "WDAGUtilityAccount"
 )
 
-# Combine safe users (includes default + competition + blue team users)
-$AllSafeUsers = $SafeUsers + $DefaultWindowsUsers + $AuthorizedAdmins | Select-Object -Unique
+# Auto-protect the currently logged-in user so the script never removes the operator
+$CurrentUser = $env:USERNAME
+if ($CurrentUser -and ($CurrentUser -notin $SafeUsers) -and ($CurrentUser -notin $AuthorizedAdmins)) {
+    Write-BlueTeamLog "AUTO-PROTECT: Adding current operator account '$CurrentUser' to safe list to prevent self-lockout" "WARNING"
+}
+
+# Combine safe users (includes default + competition + blue team users + current operator)
+$AllSafeUsers = $SafeUsers + $DefaultWindowsUsers + $AuthorizedAdmins + @($CurrentUser) | Select-Object -Unique
 Write-BlueTeamLog "Protected user list ($($AllSafeUsers.Count) users): $($AllSafeUsers -join ', ')" "INFO"
+Write-BlueTeamLog "  (Note: '$CurrentUser' auto-added as current operator)" "INFO"
 Write-BlueTeamLog "" "INFO"
 
 # ============================================================================
@@ -774,53 +779,208 @@ if ($RemovedUsers.Count -gt 0) {
 Write-BlueTeamLog "" "INFO"
 
 # ============================================================================
-# 1.5 - RESET ALL USER PASSWORDS
+# 1.5 - SELECTIVE PASSWORD RESET (MAX 3 USERS PER HOST PER DAY)
 # ============================================================================
-Write-BlueTeamLog "Step 1.5: Setting passwords for ALL remaining users..." "CRITICAL"
-Write-BlueTeamLog "All user passwords will be set to the configured team password" "INFO"
+Write-BlueTeamLog "Step 1.5: Selective password reset (max 3 users per host per competition day)..." "CRITICAL"
+Write-BlueTeamLog "A menu will be displayed. Select up to 3 users to reset to the configured team password." "INFO"
 
-# Get fresh user list after removals
-$RemainingUsers = Get-LocalUser
+# Ensure log directory exists
+$LogDir = Split-Path -Parent $LogFilePath
+if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
 
-$passwordSuccessCount = 0
-$passwordFailCount = 0
+# Dedicated log for password changes (required for competition tracking)
+$PasswordChangeLogPath = Join-Path $LogDir ("3-user-password-changes-{0}.log" -f (Get-Date -Format "yyyy-MM-dd-HHmmss"))
 
-foreach ($user in $RemainingUsers) {
-    # Skip disabled built-in accounts that can't have passwords set
-    if ($user.Name -in @('Guest', 'DefaultAccount', 'WDAGUtilityAccount') -and -not $user.Enabled) {
-        Write-BlueTeamLog "Skipping disabled built-in account: $($user.Name)" "INFO"
-        continue
-    }
-    
+function Write-PasswordChangeLog {
+    param(
+        [Parameter(Mandatory=$true)][string]$Message
+    )
     try {
-        $SecurePassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
-        Set-LocalUser -Name $user.Name -Password $SecurePassword -ErrorAction Stop
-        
-        # Special logging for users that had blank passwords
-        if ($BlankPasswordUsers -contains $user.Name) {
-            Write-BlueTeamLog "Password set for $($user.Name) (previously had BLANK PASSWORD)" "SUCCESS"
-        } else {
-            Write-BlueTeamLog "Password set for $($user.Name)" "SUCCESS"
-        }
-        
-        $passwordSuccessCount++
-        Add-Change "User Management" "Password Reset" $user.Name "Password set to team password"
-        
+        Add-Content -Path $PasswordChangeLogPath -Value ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message) -Encoding UTF8
     } catch {
-        if ($_.Exception.Message -like "*minimum password age*" -or $_.Exception.Message -like "*password policy*") {
-            Write-BlueTeamLog "Cannot reset password for $($user.Name) - minimum password age restriction" "WARNING"
-        } else {
-            Write-BlueTeamLog "Failed to set password for $($user.Name): $_" "ERROR"
-            $passwordFailCount++
-        }
+        # Fallback to main log if dedicated log write fails
+        Write-BlueTeamLog "Failed to write to password change log ($PasswordChangeLogPath): $_" "WARNING"
     }
 }
 
-Write-BlueTeamLog "Password reset complete: $passwordSuccessCount successful, $passwordFailCount failed" "INFO"
+Write-PasswordChangeLog ("Host: {0}" -f $env:COMPUTERNAME)
+Write-PasswordChangeLog "Purpose: Track up to 3 password changes per host per competition day"
+Write-PasswordChangeLog "Selected password changes:"
+
+# Initialize counters here so they are always defined even if the user skips selection
+$passwordSuccessCount = 0
+$passwordFailCount = 0
+
+# Get fresh user list after removals
+$RemainingUsers = Get-LocalUser | Sort-Object Name
+
+# Build a map of user -> privileged group memberships for display
+$UserPrivGroups = @{}
+foreach ($g in $PrivilegedGroups) {
+    try {
+        $members = Get-LocalGroupMember -Group $g -ErrorAction Stop
+        foreach ($m in $members) {
+            if ($m.ObjectClass -eq "User") {
+                $n = $m.Name
+                if ($n -match "^[^\\]+\\(.+)$") { $n = $Matches[1] }  # strip COMPUTER\ prefix
+                if (-not $UserPrivGroups.ContainsKey($n)) { $UserPrivGroups[$n] = New-Object System.Collections.Generic.List[string] }
+                if (-not $UserPrivGroups[$n].Contains($g)) { $UserPrivGroups[$n].Add($g) }
+            }
+        }
+    } catch {
+        # Some groups may not exist on certain editions; ignore quietly
+    }
+}
+
+# Display user menu
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "USER LIST (SELECT UP TO 3 FOR PASSWORD RESET)" -ForegroundColor Yellow
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+$menu = @()
+$idx = 1
+foreach ($u in $RemainingUsers) {
+    $groups = ""
+    if ($UserPrivGroups.ContainsKey($u.Name)) {
+        $groups = ($UserPrivGroups[$u.Name] | Sort-Object) -join ", "
+    } else {
+        $groups = "(none of audited privileged groups)"
+    }
+
+    $menu += [pscustomobject]@{
+        Index   = $idx
+        User    = $u.Name
+        Enabled = $u.Enabled
+        PrivilegedGroups = $groups
+    }
+    $idx++
+}
+
+$menu | Format-Table -AutoSize | Out-Host
+
+Write-Host ""
+Write-Host "Selection format examples:" -ForegroundColor DarkGray
+Write-Host "  1,3,5    (comma-separated)" -ForegroundColor DarkGray
+Write-Host "  1 3 5    (space-separated)" -ForegroundColor DarkGray
+Write-Host ""
+
+# Prompt for selection (up to 3)
+$SelectedIndices = @()
+while ($true) {
+    $raw = Read-Host "Enter up to 3 user numbers to reset (or press Enter to skip)"
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        Write-BlueTeamLog "No users selected for password reset in Step 1.5 (skipped)" "WARNING"
+        Write-PasswordChangeLog "No users selected (skipped)."
+        break
+    }
+
+    if ($raw.Trim().ToLower() -in @("q","quit","exit")) {
+        Write-BlueTeamLog "User aborted password selection in Step 1.5" "WARNING"
+        Write-PasswordChangeLog "Selection aborted by operator."
+        break
+    }
+
+    $parts = $raw -split "[,\s]+" | Where-Object { $_ -and $_.Trim() -ne "" }
+    $nums = @()
+    $bad = $false
+    foreach ($p in $parts) {
+        $n = 0
+        if (-not [int]::TryParse($p, [ref]$n)) { $bad = $true; break }
+        if ($n -lt 1 -or $n -gt $menu.Count) { $bad = $true; break }
+        if (-not ($nums -contains $n)) { $nums += $n }
+    }
+
+    if ($bad) {
+        Write-Host "Invalid selection. Enter user numbers between 1 and $($menu.Count)." -ForegroundColor Red
+        continue
+    }
+
+    if ($nums.Count -gt 3) {
+        Write-Host "Rule enforcement: You may select at most 3 users per host per day." -ForegroundColor Red
+        continue
+    }
+
+    $SelectedIndices = $nums
+    break
+}
+
+if ($SelectedIndices.Count -gt 0) {
+    $SelectedUsers = $SelectedIndices | ForEach-Object { $menu[$_ - 1].User }
+
+    Write-Host ""
+    Write-Host "Selected users for password reset:" -ForegroundColor Yellow
+    $SelectedUsers | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    Write-Host ""
+
+    $confirm = Read-Host "Proceed with resetting passwords for these users to the team password? (Y/N)"
+    if ($confirm.Trim().ToUpper() -ne "Y") {
+        Write-BlueTeamLog "Password reset cancelled by operator in Step 1.5" "WARNING"
+        Write-PasswordChangeLog ("Cancelled. Intended selections: {0}" -f ($SelectedUsers -join ", "))
+    } else {
+        $passwordSuccessCount = 0
+        $passwordFailCount = 0
+
+        foreach ($userName in $SelectedUsers) {
+            # Skip disabled built-in accounts that can't have passwords set
+            $uobj = Get-LocalUser -Name $userName -ErrorAction SilentlyContinue
+            if ($null -eq $uobj) {
+                Write-BlueTeamLog "Cannot reset password: user not found: $userName" "ERROR"
+                Write-PasswordChangeLog ("FAILED: {0} (user not found)" -f $userName)
+                $passwordFailCount++
+                continue
+            }
+
+            if ($uobj.Name -in @('Guest', 'DefaultAccount', 'WDAGUtilityAccount') -and -not $uobj.Enabled) {
+                Write-BlueTeamLog "Skipping disabled built-in account: $($uobj.Name)" "INFO"
+                Write-PasswordChangeLog ("SKIPPED: {0} (disabled built-in account)" -f $uobj.Name)
+                continue
+            }
+
+            try {
+                $SecurePassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
+                Set-LocalUser -Name $uobj.Name -Password $SecurePassword -ErrorAction Stop
+
+                if ($BlankPasswordUsers -contains $uobj.Name) {
+                    Write-BlueTeamLog "Password set for $($uobj.Name) (previously had BLANK PASSWORD)" "SUCCESS"
+                    Write-PasswordChangeLog ("SUCCESS: {0} (previously blank password)" -f $uobj.Name)
+                } else {
+                    Write-BlueTeamLog "Password set for $($uobj.Name)" "SUCCESS"
+                    Write-PasswordChangeLog ("SUCCESS: {0}" -f $uobj.Name)
+                }
+
+                $passwordSuccessCount++
+                Add-Change "User Management" "Password Reset (Selective)" $uobj.Name "Password set to team password (operator-selected; max 3 per host/day)"
+            } catch {
+                if ($_.Exception.Message -like "*minimum password age*" -or $_.Exception.Message -like "*password policy*") {
+                    Write-BlueTeamLog "Cannot reset password for $($uobj.Name) - minimum password age restriction" "WARNING"
+                    Write-PasswordChangeLog ("FAILED: {0} (minimum password age restriction)" -f $uobj.Name)
+                    $passwordFailCount++
+                } else {
+                    Write-BlueTeamLog "Failed to set password for $($uobj.Name): $_" "ERROR"
+                    Write-PasswordChangeLog ("FAILED: {0} ({1})" -f $uobj.Name, $_)
+                    $passwordFailCount++
+                }
+            }
+        }
+
+        Write-BlueTeamLog "Selective password reset complete: $passwordSuccessCount successful, $passwordFailCount failed" "INFO"
+        Write-PasswordChangeLog ("Summary: {0} successful, {1} failed" -f $passwordSuccessCount, $passwordFailCount)
+        Write-PasswordChangeLog ("Completed. Log: {0}" -f $PasswordChangeLogPath)
+
+        Write-Host ""
+        Write-Host "Password change log written to:" -ForegroundColor Cyan
+        Write-Host "  $PasswordChangeLogPath" -ForegroundColor Cyan
+        Write-Host ""
+    }
+}
+
 Write-BlueTeamLog "" "INFO"
 
 # ============================================================================
 # 1.6 - CREATE/CONFIGURE AUTHORIZED ADMIN USERS
+
 # ============================================================================
 Write-BlueTeamLog "Step 1.6: Configuring authorized admin users..." "INFO"
 
@@ -832,12 +992,56 @@ foreach ($adminUser in $AuthorizedAdmins) {
         if (-not $userExists) {
             # Create the user
             Write-BlueTeamLog "Creating new admin user: $adminUser" "INFO"
-            $SecurePassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
-            New-LocalUser -Name $adminUser -Password $SecurePassword -FullName "Blue Team Admin" -Description "Authorized Blue Team Administrator" -PasswordNeverExpires:$true
-            Add-Change "User Management" "Created User" $adminUser "New authorized admin user"
-            Write-BlueTeamLog "Successfully created user: $adminUser" "SUCCESS"
+
+            # Windows complexity policy rejects passwords that contain 3+ consecutive characters
+            # from the account name being created. Pre-check here so we can use a safe interim
+            # password instead of silently failing with InvalidPasswordException.
+            $passwordToUse = $SetAllUserPasswords
+            $usernameSubstringFound = $false
+            if ($adminUser.Length -ge 3) {
+                for ($si = 0; $si -le $adminUser.Length - 3; $si++) {
+                    $chunk = $adminUser.Substring($si, 3).ToLower()
+                    if ($passwordToUse.ToLower().Contains($chunk)) {
+                        $usernameSubstringFound = $true
+                        Write-BlueTeamLog "WARNING: Team password contains '$chunk' (substring of '$adminUser') - Windows will reject it for this account." "WARNING"
+                        Write-BlueTeamLog "Using a safe interim password for account creation. You should update `$SetAllUserPasswords to avoid substrings of all admin usernames." "WARNING"
+                        # Use an interim password that avoids the username substring.
+                        # Built by replacing the conflicting section; guaranteed to meet complexity.
+                        $passwordToUse = "TmpCreate@" + (Get-Date -Format "HHmmss") + "Z!"
+                        break
+                    }
+                }
+            }
+
+            $SecurePassword = ConvertTo-SecureString $passwordToUse -AsPlainText -Force
+            $userCreated = $false
+            try {
+                New-LocalUser -Name $adminUser -Password $SecurePassword -FullName "Blue Team Admin" -Description "Authorized Blue Team Administrator" -PasswordNeverExpires:$true -ErrorAction Stop
+                $userCreated = $true
+                Add-Change "User Management" "Created User" $adminUser "New authorized admin user"
+                Write-BlueTeamLog "Successfully created user: $adminUser" "SUCCESS"
+
+                # If we used an interim password, immediately update to the real team password
+                # now that the account exists (Set-LocalUser is not subject to the same
+                # name-in-password restriction as New-LocalUser on account creation).
+                if ($usernameSubstringFound) {
+                    try {
+                        $RealPassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
+                        Set-LocalUser -Name $adminUser -Password $RealPassword -ErrorAction Stop
+                        Write-BlueTeamLog "Real team password applied to $adminUser after creation" "SUCCESS"
+                    } catch {
+                        Write-BlueTeamLog "Could not apply real team password to $adminUser after creation (interim password is active): $_" "WARNING"
+                    }
+                }
+            } catch {
+                Write-BlueTeamLog "Failed to create user $adminUser : $_" "ERROR"
+            }
+            if (-not $userCreated) {
+                Write-BlueTeamLog "Skipping group configuration for $adminUser because user creation failed" "WARNING"
+                continue
+            }
         } else {
-            Write-BlueTeamLog "User $adminUser already exists (password already set in previous step)" "INFO"
+            Write-BlueTeamLog "User $adminUser already exists" "INFO"
         }
         
         # Ensure user is in Administrators group (idempotent operation)
@@ -1246,44 +1450,124 @@ if ($BlockAllInboundByDefault) {
     Write-BlueTeamLog "Removed $removedRulesCount potentially malicious firewall rules" "SUCCESS"
 }
 
-# Create rules for allowed inbound ports
+# ── SERVICE-SPECIFIC FIREWALL RULES ─────────────────────────────────────────
+# Ask the operator which scored Windows service is on this host so we only open
+# the ports that are actually needed. Opening every service port on every host
+# is unnecessary attack surface. RDP (3389) is always opened per Rule 10.
 Write-BlueTeamLog "" "INFO"
-Write-BlueTeamLog "Creating firewall rules for allowed ports..." "INFO"
-foreach ($port in $AllowedInboundPorts) {
-    try {
-        $ruleName = "Blue Team - Allow Port $port"
-        
-        # Check if rule already exists with correct configuration
-        $existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
-        
-        if ($existingRule) {
-            # Rule exists - verify it's configured correctly
-            $portFilter = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $existingRule -ErrorAction SilentlyContinue
-            
-            if ($portFilter.LocalPort -eq $port -and $existingRule.Enabled -eq $true -and $existingRule.Action -eq "Allow") {
-                Write-BlueTeamLog "Firewall rule for port $port already exists and is correctly configured" "INFO"
-                continue
-            } else {
-                Write-BlueTeamLog "Firewall rule for port $port exists but needs updating" "INFO"
-                Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
-            }
-        }
-        
-        # Create new rule
-        New-NetFirewallRule -DisplayName $ruleName `
-            -Direction Inbound `
-            -Protocol TCP `
-            -LocalPort $port `
-            -Action Allow `
-            -Enabled True `
-            -Profile Any -ErrorAction SilentlyContinue | Out-Null
-        
-        Write-BlueTeamLog "Created firewall rule for port $port" "SUCCESS"
-        Add-Change "Firewall" "Allowed Port" $port "Inbound traffic allowed"
-    } catch {
-        Write-BlueTeamLog "Failed to create firewall rule for port ${port}: $_" "ERROR"
+Write-BlueTeamLog "============================================================" "INFO"
+Write-BlueTeamLog "SERVICE PORT SELECTION" "CRITICAL"
+Write-BlueTeamLog "============================================================" "INFO"
+Write-BlueTeamLog "Each Windows host runs ONE scored service. Only open ports for YOUR service." "WARNING"
+Write-BlueTeamLog "RDP (3389) will always be opened regardless of selection." "INFO"
+Write-BlueTeamLog "" "INFO"
+
+# Port definitions per service
+$ServicePortMap = @{
+    "1" = @{ Name = "Active Directory (canterlot)";  Ports = @(88, 135, 389, 445, 636, 3268, 3269); RpcDynamic = $true }
+    "2" = @{ Name = "MSSQL (manehatten)";            Ports = @(1433);                               RpcDynamic = $false }
+    "3" = @{ Name = "IIS (las-pegasus)";             Ports = @(80, 443);                            RpcDynamic = $false }
+    "4" = @{ Name = "SMB (appleloosa)";              Ports = @(445);                                RpcDynamic = $false }
+    "5" = @{ Name = "Workstation (no service port)"; Ports = @();                                   RpcDynamic = $false }
+}
+
+Write-Host ""
+Write-Host "================================================================================" -ForegroundColor Cyan
+Write-Host "        WHICH SCORED SERVICE IS RUNNING ON THIS WINDOWS HOST?" -ForegroundColor Cyan
+Write-Host "================================================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  [1]  Active Directory   - canterlot  (10.0.10.1)" -ForegroundColor White
+Write-Host "       Ports: 88, 135, 389, 445, 636, 3268, 3269 + RPC dynamic (49152-65535)" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  [2]  MSSQL              - manehatten (10.0.10.2)" -ForegroundColor White
+Write-Host "       Ports: 1433" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  [3]  IIS                - las-pegasus (10.0.20.1)" -ForegroundColor White
+Write-Host "       Ports: 80, 443" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  [4]  SMB                - appleloosa (10.0.20.2)" -ForegroundColor White
+Write-Host "       Ports: 445" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  [5]  Workstation        - baltamare / neighara-falls / fillydelphia" -ForegroundColor White
+Write-Host "       No additional service port (RDP only)" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  (All options also open RDP port 3389 - required per Rule 10)" -ForegroundColor DarkYellow
+Write-Host ""
+Write-Host "================================================================================" -ForegroundColor Cyan
+
+$serviceChoice = $null
+while ($null -eq $serviceChoice) {
+    Write-Host "Enter service number [1-5]: " -NoNewline -ForegroundColor Cyan
+    $raw = Read-Host
+    $raw = $raw.Trim()
+    if ($ServicePortMap.ContainsKey($raw)) {
+        $serviceChoice = $raw
+    } else {
+        Write-Host "  Invalid selection. Please enter a number between 1 and 5." -ForegroundColor Red
     }
 }
+
+$SelectedService = $ServicePortMap[$serviceChoice]
+Write-BlueTeamLog "Operator selected service: $($SelectedService.Name)" "CRITICAL"
+Add-Change "Firewall" "Service Selection" $SelectedService.Name "Ports will be restricted to this service only"
+
+# Always include RDP
+$AllowedInboundPorts = @(3389) + $SelectedService.Ports
+
+Write-BlueTeamLog "" "INFO"
+Write-BlueTeamLog "Creating firewall rules for allowed ports..." "INFO"
+Write-BlueTeamLog "  Service: $($SelectedService.Name)" "INFO"
+Write-BlueTeamLog "  Ports to open: $(($AllowedInboundPorts | Sort-Object) -join ', ')" "INFO"
+
+# Helper: create or verify a single TCP inbound rule
+function Set-InboundPortRule {
+    param([int]$Port, [string]$Label)
+    $ruleName = "Blue Team - Allow Port $Port ($Label)"
+    try {
+        $existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        if ($existingRule) {
+            $portFilter = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $existingRule -ErrorAction SilentlyContinue
+            if ($portFilter.LocalPort -eq $Port -and $existingRule.Enabled -eq $true -and $existingRule.Action -eq "Allow") {
+                Write-BlueTeamLog "Firewall rule for port $Port ($Label) already correct" "INFO"
+                return
+            }
+            Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        }
+        New-NetFirewallRule -DisplayName $ruleName `
+            -Direction Inbound -Protocol TCP -LocalPort $Port `
+            -Action Allow -Enabled True -Profile Any `
+            -ErrorAction SilentlyContinue | Out-Null
+        Write-BlueTeamLog "Created firewall rule: port $Port ($Label)" "SUCCESS"
+        Add-Change "Firewall" "Allowed Port" "$Port ($Label)" "Inbound TCP allowed"
+    } catch {
+        Write-BlueTeamLog "Failed to create firewall rule for port ${Port}: $_" "ERROR"
+    }
+}
+
+# RDP - always
+Set-InboundPortRule -Port 3389 -Label "RDP - Required Rule 10"
+
+# Service-specific ports
+foreach ($port in $SelectedService.Ports) {
+    Set-InboundPortRule -Port $port -Label $SelectedService.Name
+}
+
+# Active Directory also needs the RPC dynamic port range
+if ($SelectedService.RpcDynamic) {
+    Write-BlueTeamLog "Creating RPC dynamic port range rule for Active Directory (49152-65535)..." "INFO"
+    $rpcRuleName = "Blue Team - Allow RPC Dynamic (AD)"
+    $existingRpc = Get-NetFirewallRule -DisplayName $rpcRuleName -ErrorAction SilentlyContinue
+    if ($existingRpc) { Remove-NetFirewallRule -DisplayName $rpcRuleName -ErrorAction SilentlyContinue }
+    New-NetFirewallRule -DisplayName $rpcRuleName `
+        -Direction Inbound -Protocol TCP -LocalPort "49152-65535" `
+        -Action Allow -Enabled True -Profile Any `
+        -ErrorAction SilentlyContinue | Out-Null
+    Write-BlueTeamLog "Created RPC dynamic port range rule (49152-65535)" "SUCCESS"
+    Add-Change "Firewall" "Allowed Port Range" "49152-65535 (RPC Dynamic - AD)" "Required for Active Directory"
+}
+
+Write-BlueTeamLog "" "INFO"
+Write-BlueTeamLog "Service port rules complete. Only $($SelectedService.Name) ports are open." "SUCCESS"
 
 # Create rules for safe IP addresses
 Write-BlueTeamLog "" "INFO"
@@ -1349,179 +1633,128 @@ foreach ($ipRange in $SafeIPRanges) {
 # ============================================================================
 }
 if ($RunPhase4) {
-# 4. SSH HARDENING
+# 4. SSH REMOVAL (Windows - SSH not required, only RDP is)
 # ============================================================================
 Write-BlueTeamLog "" "INFO"
 Write-BlueTeamLog "============================================================" "INFO"
-Write-BlueTeamLog "PHASE 4: SSH HARDENING" "CRITICAL"
+Write-BlueTeamLog "PHASE 4: SSH REMOVAL (SSH not required on Windows - NUKE IT)" "CRITICAL"
 Write-BlueTeamLog "============================================================" "INFO"
 
-if ($EnableSSHHardening) {
-    # Check if OpenSSH Server is installed
-    $sshServerFeature = Get-WindowsCapability -Online -ErrorAction SilentlyContinue | Where-Object Name -like 'OpenSSH.Server*'
-    
-    if ($sshServerFeature.State -eq "Installed") {
-        Write-BlueTeamLog "OpenSSH Server detected, applying hardening..." "INFO"
-        
-        # Ensure SSH service is started (creates config if needed)
-        try {
-            Start-Service sshd -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 2
-        } catch {
-            Write-BlueTeamLog "SSH service start skipped: $_" "INFO"
+# ── SSH REMOVAL (Windows only) ───────────────────────────────────────────────
+# Rule 10 only requires RDP to remain open on Windows. SSH is NOT required and
+# is an unnecessary attack surface. If OpenSSH Server is installed, REMOVE IT.
+# Block port 22 at the firewall and remove any existing SSH firewall rules.
+Write-BlueTeamLog "Checking for OpenSSH Server - will REMOVE if found (not required on Windows)..." "CRITICAL"
+
+# Step 1: Nuke any existing firewall rules for port 22 / SSH
+Write-BlueTeamLog "Removing any SSH (port 22) firewall rules..." "INFO"
+$sshFwRulesRemoved = 0
+try {
+    # Remove by well-known rule names
+    $knownSSHRuleNames = @("OpenSSH-Server-In-TCP", "OpenSSH SSH Server (sshd)")
+    foreach ($rn in $knownSSHRuleNames) {
+        $r = Get-NetFirewallRule -Name $rn -ErrorAction SilentlyContinue
+        if (-not $r) { $r = Get-NetFirewallRule -DisplayName $rn -ErrorAction SilentlyContinue }
+        if ($r) {
+            Remove-NetFirewallRule -Name $r.Name -ErrorAction SilentlyContinue
+            Write-BlueTeamLog "  Removed SSH firewall rule: $($r.DisplayName)" "REMOVED"
+            $sshFwRulesRemoved++
         }
-        
-        # Configure sshd_config
-        $sshdConfigPath = "C:\ProgramData\ssh\sshd_config"
-        
-        # Create config directory if it doesn't exist
-        $sshDir = "C:\ProgramData\ssh"
-        if (-not (Test-Path $sshDir)) {
-            New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-            Write-BlueTeamLog "Created SSH directory: $sshDir" "INFO"
-        }
-        
-        try {
-            # Backup original config if it exists
-            $skipSSHConfig = $false
-            
-            if (Test-Path $sshdConfigPath) {
-                # Check if config is already hardened
-                $currentConfig = Get-Content $sshdConfigPath -Raw
-                
-                if ($currentConfig -like "*Blue Team Hardened SSH Configuration*") {
-                    Write-BlueTeamLog "SSH configuration already hardened - skipping config rewrite" "INFO"
-                    $skipSSHConfig = $true
-                    
-                    # Still ensure SSH service is running and set to automatic
-                    try {
-                        $sshService = Get-Service -Name sshd -ErrorAction SilentlyContinue
-                        if ($sshService.Status -ne "Running") {
-                            Start-Service sshd -ErrorAction SilentlyContinue
-                            Write-BlueTeamLog "Started SSH service" "SUCCESS"
-                        }
-                        if ($sshService.StartType -ne "Automatic") {
-                            Set-Service -Name sshd -StartupType Automatic
-                            Write-BlueTeamLog "Set SSH service to automatic startup" "SUCCESS"
-                        }
-                    } catch {
-                        Write-BlueTeamLog "Failed to configure SSH service: $_" "WARNING"
-                    }
-                }
-                
-                if (-not $skipSSHConfig) {
-                    $backupPath = "$sshdConfigPath.backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-                    Copy-Item $sshdConfigPath $backupPath
-                    Write-BlueTeamLog "Backed up SSH config to: $backupPath" "INFO"
-                }
-            } else {
-                Write-BlueTeamLog "Creating new SSH config file" "INFO"
-            }
-            
-            if (-not $skipSSHConfig) {
-                
-                # Create hardened config
-                $hardenedConfig = @"
-# Blue Team Hardened SSH Configuration
-# Generated: $(Get-Date)
-
-Port $SSHPort
-Protocol 2
-PermitRootLogin no
-MaxAuthTries $SSHMaxAuthTries
-LoginGraceTime $SSHLoginGraceTime
-StrictModes yes
-PubkeyAuthentication yes
-PasswordAuthentication $(if ($AllowSSHPasswordAuth) { 'yes' } else { 'no' })
-PermitEmptyPasswords no
-ChallengeResponseAuthentication no
-UsePAM no
-X11Forwarding no
-PrintMotd yes
-ClientAliveInterval 300
-ClientAliveCountMax 2
-AllowTcpForwarding no
-AllowStreamLocalForwarding no
-GatewayPorts no
-PermitTunnel no
-
-# Only allow specific users
-AllowUsers $($AuthorizedAdmins -join ' ')
-
-# Logging
-SyslogFacility AUTH
-LogLevel VERBOSE
-
-# Use strong ciphers only
-Ciphers aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
-MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
-KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
-
-# Subsystem
-Subsystem       sftp    sftp-server.exe
-"@
-                
-                # Write hardened config
-                $hardenedConfig | Set-Content $sshdConfigPath -Force
-                
-                Write-BlueTeamLog "SSH configuration hardened" "SUCCESS"
-                Write-BlueTeamLog "  - Port: $SSHPort" "INFO"
-                Write-BlueTeamLog "  - Password auth: $(if ($AllowSSHPasswordAuth) { 'Enabled' } else { 'Disabled' })" "INFO"
-                Write-BlueTeamLog "  - Allowed users: $($AuthorizedAdmins -join ', ')" "INFO"
-                Write-BlueTeamLog "  - Max auth tries: $SSHMaxAuthTries" "INFO"
-                
-                Add-Change "SSH" "Configuration" "Hardened" "Restricted to authorized users only"
-                
-                # Restart SSH service
-                Write-BlueTeamLog "Restarting SSH service..." "INFO"
-                Restart-Service sshd -Force
-                Write-BlueTeamLog "SSH service restarted" "SUCCESS"
-                
-                # Set SSH service to start automatically
-                Set-Service -Name sshd -StartupType Automatic
-                
-                # Configure SSH firewall rule
-                $sshFirewallRule = Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue
-                if ($sshFirewallRule) {
-                    Enable-NetFirewallRule -Name "OpenSSH-Server-In-TCP"
-                    Write-BlueTeamLog "SSH firewall rule enabled" "SUCCESS"
-                }
-                
-            } # End of if (-not $skipSSHConfig)
-                
-        } catch {
-            Write-BlueTeamLog "Failed to harden SSH configuration: $_" "ERROR"
-        }
-        
-        # Set proper permissions on SSH directory
-        try {
-            $sshDir = "C:\ProgramData\ssh"
-            $acl = Get-Acl $sshDir
-            $acl.SetAccessRuleProtection($true, $false)
-            
-            # Remove all existing rules
-            $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) | Out-Null }
-            
-            # Add SYSTEM full control
-            $systemRule = New-Object System.Security.AccessControl.FileSystemAccessRule("SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
-            $acl.AddAccessRule($systemRule)
-            
-            # Add Administrators full control
-            $adminRule = New-Object System.Security.AccessControl.FileSystemAccessRule("Administrators", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
-            $acl.AddAccessRule($adminRule)
-            
-            Set-Acl $sshDir $acl
-            Write-BlueTeamLog "SSH directory permissions hardened" "SUCCESS"
-        } catch {
-            Write-BlueTeamLog "Failed to set SSH directory permissions: $_" "ERROR"
-        }
-        
-    } else {
-        Write-BlueTeamLog "OpenSSH Server is not installed, skipping SSH hardening" "WARNING"
     }
-} else {
-    Write-BlueTeamLog "SSH hardening disabled in configuration" "INFO"
+    # Also sweep for any rule touching port 22
+    Get-NetFirewallRule -Direction Inbound -ErrorAction SilentlyContinue | ForEach-Object {
+        $pf = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $_ -ErrorAction SilentlyContinue
+        if ($pf -and $pf.LocalPort -eq 22) {
+            Remove-NetFirewallRule -Name $_.Name -ErrorAction SilentlyContinue
+            Write-BlueTeamLog "  Removed inbound firewall rule for port 22: $($_.DisplayName)" "REMOVED"
+            $sshFwRulesRemoved++
+        }
+    }
+    # Also remove any Blue Team SSH allow rule left from a previous run
+    $btSSH = Get-NetFirewallRule -DisplayName "Blue Team - Allow Port 22*" -ErrorAction SilentlyContinue
+    if ($btSSH) {
+        Remove-NetFirewallRule -DisplayName "Blue Team - Allow Port 22*" -ErrorAction SilentlyContinue
+        Write-BlueTeamLog "  Removed Blue Team SSH allow rule" "REMOVED"
+        $sshFwRulesRemoved++
+    }
+} catch {
+    Write-BlueTeamLog "Error while sweeping SSH firewall rules: $_" "WARNING"
 }
+
+# Step 2: Add an explicit BLOCK rule for port 22 so nothing can sneak through
+try {
+    $blockRuleName = "Blue Team - BLOCK SSH Port 22"
+    $existing = Get-NetFirewallRule -DisplayName $blockRuleName -ErrorAction SilentlyContinue
+    if (-not $existing) {
+        New-NetFirewallRule -DisplayName $blockRuleName `
+            -Direction Inbound -Protocol TCP -LocalPort 22 `
+            -Action Block -Enabled True -Profile Any `
+            -ErrorAction Stop | Out-Null
+        Write-BlueTeamLog "Created explicit BLOCK rule for port 22" "SUCCESS"
+        Add-Change "Firewall" "Blocked Port" "22 (SSH)" "SSH is not required on Windows - hard blocked"
+    } else {
+        Write-BlueTeamLog "Explicit BLOCK rule for port 22 already exists" "INFO"
+    }
+} catch {
+    Write-BlueTeamLog "Failed to create port 22 block rule: $_" "ERROR"
+}
+Write-BlueTeamLog "SSH firewall cleanup complete. Removed $sshFwRulesRemoved SSH rule(s)." "SUCCESS"
+
+# Step 3: Stop and disable the sshd service if it exists
+try {
+    $sshdService = Get-Service -Name sshd -ErrorAction SilentlyContinue
+    if ($sshdService) {
+        Write-BlueTeamLog "OpenSSH sshd service found - stopping and disabling..." "WARNING"
+        Stop-Service -Name sshd -Force -ErrorAction SilentlyContinue
+        Set-Service -Name sshd -StartupType Disabled -ErrorAction SilentlyContinue
+        Write-BlueTeamLog "sshd service stopped and set to Disabled" "SUCCESS"
+        Add-Change "SSH Removal" "sshd Service" "Stopped + Disabled" "SSH not required on Windows"
+    } else {
+        Write-BlueTeamLog "sshd service not found (already removed or never installed)" "INFO"
+    }
+} catch {
+    Write-BlueTeamLog "Error stopping sshd service: $_" "WARNING"
+}
+
+# Step 4: Also stop ssh-agent if running
+try {
+    $sshAgent = Get-Service -Name ssh-agent -ErrorAction SilentlyContinue
+    if ($sshAgent -and $sshAgent.Status -eq "Running") {
+        Stop-Service -Name ssh-agent -Force -ErrorAction SilentlyContinue
+        Set-Service -Name ssh-agent -StartupType Disabled -ErrorAction SilentlyContinue
+        Write-BlueTeamLog "ssh-agent service stopped and disabled" "SUCCESS"
+        Add-Change "SSH Removal" "ssh-agent Service" "Stopped + Disabled" "SSH not required on Windows"
+    }
+} catch {
+    # Non-critical
+}
+
+# Step 5: Uninstall OpenSSH Server feature if installed
+$sshServerFeature = $null
+try {
+    $sshServerFeature = Get-WindowsCapability -Online -ErrorAction Stop | Where-Object Name -like 'OpenSSH.Server*'
+} catch {
+    Write-BlueTeamLog "Get-WindowsCapability failed (common after user account changes) - skipping feature removal check" "WARNING"
+}
+
+if ($sshServerFeature -and $sshServerFeature.State -eq "Installed") {
+    Write-BlueTeamLog "OpenSSH.Server feature is installed - REMOVING IT NOW..." "CRITICAL"
+    try {
+        Remove-WindowsCapability -Online -Name $sshServerFeature.Name -ErrorAction Stop | Out-Null
+        Write-BlueTeamLog "OpenSSH.Server feature successfully REMOVED" "SUCCESS"
+        Add-Change "SSH Removal" "OpenSSH.Server Feature" "Uninstalled" "SSH not required on Windows"
+    } catch {
+        Write-BlueTeamLog "Failed to remove OpenSSH.Server feature: $_" "ERROR"
+        Write-BlueTeamLog "  Service is stopped/disabled and port 22 is blocked even if feature removal failed" "WARNING"
+    }
+} elseif ($sshServerFeature -and $sshServerFeature.State -ne "Installed") {
+    Write-BlueTeamLog "OpenSSH.Server feature is not installed - nothing to remove" "INFO"
+} else {
+    Write-BlueTeamLog "Could not verify OpenSSH.Server feature state - service and firewall have been handled above" "WARNING"
+}
+
+Write-BlueTeamLog "" "INFO"
+Write-BlueTeamLog "Phase 4 complete: SSH fully removed/blocked on this Windows host" "SUCCESS"
 
 # ============================================================================
 }
@@ -1778,7 +2011,11 @@ if ($ScanForBackdoors) {
             "RtkAudioManager",
             "Intel",
             "AMD",
-            "NVIDIA"
+            "NVIDIA",
+            "msedge",          # Microsoft Edge and EdgeWebView cleanup tasks are legitimate
+            "MicrosoftEdge",
+            "EdgeWebView",
+            "MsEdge"
         )
         
         $startupLocations = @(
@@ -2059,14 +2296,40 @@ try {
 }
 
 # Disable Windows Script Host (prevents .vbs, .js malware)
+# IMPORTANT: Setting Enabled=0 in the registry still lets wscript.exe/cscript.exe
+# launch and show a popup dialog every time anything calls WSH. The silent fix is to
+# deny execute permissions on the binaries directly - they cannot run at all and
+# produce no dialog. The registry key is kept as a second layer.
 try {
-    Write-BlueTeamLog "Disabling Windows Script Host..." "INFO"
-    if (-not (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows Script Host\Settings")) {
-        New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows Script Host\Settings" -Force | Out-Null
+    Write-BlueTeamLog "Disabling Windows Script Host (revoking execute access on wscript/cscript)..." "INFO"
+
+    $wshBinaries = @(
+        "$env:SystemRoot\System32\wscript.exe",
+        "$env:SystemRoot\System32\cscript.exe",
+        "$env:SystemRoot\SysWOW64\wscript.exe",
+        "$env:SystemRoot\SysWOW64\cscript.exe"
+    )
+    foreach ($binary in $wshBinaries) {
+        if (Test-Path $binary) {
+            try {
+                & takeown /f $binary /A 2>&1 | Out-Null
+                & icacls $binary /grant "Administrators:F" 2>&1 | Out-Null
+                & icacls $binary /deny "Everyone:(X)" 2>&1 | Out-Null
+                & icacls $binary /deny "Users:(X)" 2>&1 | Out-Null
+                Write-BlueTeamLog "  Revoked execute access: $binary" "SUCCESS"
+            } catch {
+                Write-BlueTeamLog "  Could not modify permissions on $binary : $_" "WARNING"
+            }
+        }
     }
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows Script Host\Settings" -Name "Enabled" -Value 0 -Type DWord -Force
-    Add-Change "System Security" "Windows Script Host" "Disabled" "Prevents script-based malware"
-    Write-BlueTeamLog "Windows Script Host disabled" "SUCCESS"
+
+    # Registry key as a second layer
+    $wshRegPath = "HKLM:\SOFTWARE\Microsoft\Windows Script Host\Settings"
+    if (-not (Test-Path $wshRegPath)) { New-Item -Path $wshRegPath -Force | Out-Null }
+    Set-ItemProperty -Path $wshRegPath -Name "Enabled" -Value 0 -Type DWord -Force
+
+    Add-Change "System Security" "Windows Script Host" "Disabled" "Execute access denied on wscript.exe/cscript.exe (no popup)"
+    Write-BlueTeamLog "Windows Script Host disabled silently (no popup)" "SUCCESS"
 } catch {
     Write-BlueTeamLog "Failed to disable Windows Script Host: $_" "ERROR"
 }
@@ -2246,11 +2509,11 @@ Write-BlueTeamLog "BLUE TEAM RECOMMENDATIONS - CDT COMPETITION:" "CRITICAL"
 Write-BlueTeamLog "============================================================" "INFO"
 Write-BlueTeamLog "1. RESTART the system to apply all changes" "WARNING"
 Write-BlueTeamLog "2. REVIEW the log file for any errors: $LogFilePath" "WARNING"
-Write-BlueTeamLog "3. VERIFY connectivity to scoring engine at https://172.20.0.100:443" "WARNING"
+Write-BlueTeamLog "3. VERIFY connectivity to scoring engine at https://scoring.mlp.local:443" "WARNING"
 Write-BlueTeamLog "4. CHECK that all scored services are still running" "WARNING"
 Write-BlueTeamLog "5. VERIFY all competition users can still access the system" "WARNING"
 Write-BlueTeamLog "6. REMEMBER: You can only change passwords 3 times per host per session!" "CRITICAL"
-Write-BlueTeamLog "7. DO NOT disable SSH or RDP (Rule 10 violation)" "CRITICAL"
+Write-BlueTeamLog "7. DO NOT disable RDP on Windows - SSH on Windows should be REMOVED (Rule 10)" "CRITICAL"
 Write-BlueTeamLog "8. DO NOT remove competition users (Rule 9 violation)" "CRITICAL"
 Write-BlueTeamLog "9. DO NOT block entire subnets (Rule 7 violation)" "CRITICAL"
 Write-BlueTeamLog "10. MONITOR the Security event log for Red Team activity" "WARNING"
