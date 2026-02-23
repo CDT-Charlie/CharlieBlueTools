@@ -10,11 +10,11 @@
 .BEFORE_RUNNING
     **REQUIRED CONFIGURATION - EDIT THESE VARIABLES:**
     
-    1. $AuthorizedAdmins - Add your blue team usernames
+    1. $AuthorizedAdmins - Add your blue team usernames (I did this for you already!)
     
-    2. $SetAllUserPasswords - Change to YOUR secure password @(line 242)
+    2. $SetAllUserPasswords - Change to YOUR secure password @(line 251)
     
-    3. $SafeIPAddresses - Verify scoring engine/jumpbox IPs
+    3. $SafeIPAddresses - Verify scoring engine/jumpbox IPs (Should be done already as well!)
     
     **OPTIONAL:** Review $SafeUsers to ensure all competition users are protected
     
