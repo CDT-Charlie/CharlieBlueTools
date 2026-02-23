@@ -223,6 +223,54 @@ check_writable_surface() {
     done
 }
 
+# --- E) Baseline drift (SUID/SGID + core binary hashes) ---
+check_baseline_drift() {
+    section "Baseline drift (SUID/SGID + core hashes)"
+
+    BASE_DIR="/root/baselines"
+    SUID_BASE="${BASE_DIR}/suid_sgid.list"
+    HASH_BASE="${BASE_DIR}/core_bins.sha256"
+
+    # 1) SUID/SGID drift (anywhere on root FS)
+    if [ -f "$SUID_BASE" ]; then
+        CUR="/tmp/suid_sgid.current"
+        find / -xdev \( -perm -4000 -o -perm -2000 \) -type f 2>/dev/null | sort > "$CUR" || true
+        if ! diff -u "$SUID_BASE" "$CUR" >/tmp/suid_sgid.diff 2>/dev/null; then
+            alert "SUID/SGID baseline changed! See /tmp/suid_sgid.diff"
+        fi
+    else
+        # Not an alert; means hardening baseline not created yet
+        log "No SUID baseline found at $SUID_BASE (run hardening script once to create it)"
+    fi
+
+    # 2) Core binary hash drift (sudo/su/sshd)
+    if [ -f "$HASH_BASE" ]; then
+        if ! sha256sum -c "$HASH_BASE" >/tmp/core_bins.hashcheck 2>&1; then
+            alert "Core binary hash mismatch! See /tmp/core_bins.hashcheck"
+        fi
+    else
+        log "No hash baseline found at $HASH_BASE (run hardening script once to create it)"
+    fi
+}
+
+# --- F) PATH hijack risk (writable PATH dirs) ---
+check_path_hijack_risk() {
+    section "PATH hijack risk (writable PATH directories)"
+
+    # Check root's default PATH (most important)
+    root_path="$(sudo -n env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin bash -lc 'echo $PATH' 2>/dev/null || echo '/usr/sbin:/usr/bin:/sbin:/bin')"
+
+    for p in "$root_path" "$PATH"; do
+        echo "$p" | tr ':' '\n' | while read -r d; do
+            [ -d "$d" ] || continue
+            # Flag if writable by group or others
+            if find "$d" -maxdepth 0 -perm -0020 -o -perm -0002 2>/dev/null | grep -q .; then
+                alert "PATH directory writable (risk): $d"
+            fi
+        done
+    done
+}
+
 # --- D) Covert channel / unusual network ---
 check_covert_network() {
     section "Covert channel / unusual network"
@@ -309,5 +357,7 @@ done
 check_privilege_escalation
 check_persistence
 check_writable_surface
+check_baseline_drift
+check_path_hijack_risk
 check_covert_network
 summary

@@ -213,6 +213,85 @@ check_cron_spool() {
     done
 }
 
+# --- World-writable directories: report only (outside temp) ---
+audit_world_writable_dirs() {
+    log "Checking for world-writable directories (outside /tmp,/var/tmp)..."
+    while IFS= read -r -d '' d; do
+        case "$d" in
+            /tmp|/tmp/*|/var/tmp|/var/tmp/*) continue ;;
+        esac
+        perms=$(stat -c '%a' "$d" 2>/dev/null || true)
+        warn "World-writable dir: $d ($perms) — investigate; fix manually if unsafe"
+    done < <(find / -xdev -type d -perm -0002 -print0 2>/dev/null | head -z -n 80) 2>/dev/null || true
+}
+
+# --- PATH directory permissions: report only ---
+audit_path_dirs() {
+    log "Checking PATH directory permissions (root + current env)..."
+    # Root PATH (what matters most)
+    root_path="$(sudo -n env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin bash -lc 'echo $PATH' 2>/dev/null || echo '/usr/sbin:/usr/bin:/sbin:/bin')"
+    for p in "$root_path" "$PATH"; do
+        echo "$p" | tr ':' '\n' | while read -r d; do
+            [ -d "$d" ] || continue
+            # Flag if directory is writable by group/other
+            if find "$d" -maxdepth 0 -perm -0020 -o -perm -0002 2>/dev/null | grep -q .; then
+                warn "PATH dir writable by group/other: $d — risk of PATH hijack"
+            fi
+        done
+    done
+}
+
+# --- SUID/SGID inventory + baseline (detect changes) ---
+inventory_suid_sgid() {
+    log "SUID/SGID inventory (baseline + verify changes)..."
+    BASE_DIR="/root/baselines"
+    BASE_FILE="${BASE_DIR}/suid_sgid.list"
+    CUR_FILE="/tmp/suid_sgid.current"
+
+    mkdir -p "$BASE_DIR" 2>/dev/null || true
+
+    find / -xdev \( -perm -4000 -o -perm -2000 \) -type f 2>/dev/null | sort > "$CUR_FILE" || true
+
+    if [ ! -f "$BASE_FILE" ]; then
+        cp "$CUR_FILE" "$BASE_FILE" 2>/dev/null && log "Created baseline: $BASE_FILE" && log_change "created $BASE_FILE"
+    else
+        if ! diff -u "$BASE_FILE" "$CUR_FILE" >/tmp/suid_sgid.diff 2>/dev/null; then
+            warn "SUID/SGID list changed since baseline! See: /tmp/suid_sgid.diff"
+        fi
+    fi
+}
+
+# --- Critical binary hash baseline (detect tampering) ---
+baseline_hashes() {
+    log "Critical binary hash baseline (sudo/su/sshd if present)..."
+    BASE_DIR="/root/baselines"
+    BASE_FILE="${BASE_DIR}/core_bins.sha256"
+    CUR_FILE="/tmp/core_bins.current.sha256"
+
+    mkdir -p "$BASE_DIR" 2>/dev/null || true
+
+    # Only hash files that exist
+    files=""
+    for f in /usr/bin/sudo /bin/su /usr/sbin/sshd; do
+        [ -f "$f" ] && files="${files} $f"
+    done
+
+    if [ -z "$files" ]; then
+        skip "No core binaries found to baseline (unexpected); skipping"
+        return 0
+    fi
+
+    sha256sum $files 2>/dev/null | sort > "$CUR_FILE" || true
+
+    if [ ! -f "$BASE_FILE" ]; then
+        cp "$CUR_FILE" "$BASE_FILE" 2>/dev/null && log "Created baseline: $BASE_FILE" && log_change "created $BASE_FILE"
+    else
+        if ! sha256sum -c "$BASE_FILE" >/tmp/core_bins.hashcheck 2>&1; then
+            warn "Hash mismatch detected! See: /tmp/core_bins.hashcheck"
+        fi
+    fi
+}
+
 # --- Competition-aware checks (warn only; never modify or abort) ---
 comp_checks() {
     log "Competition / persistence checks (warn only)..."
@@ -413,6 +492,10 @@ verify_all() {
     verify_sysctl
     log "Competition / persistence (warn only)"
     comp_checks
+    audit_world_writable_dirs
+    audit_path_dirs
+    inventory_suid_sgid
+    baseline_hashes
     echo ""
     echo "=== End verify ==="
     echo "Log (if hardening was run): $LOG_FILE"
@@ -455,6 +538,10 @@ main() {
     harden_files
     harden_homedirs
     harden_no_world_writable
+    audit_world_writable_dirs
+    audit_path_dirs
+    inventory_suid_sgid
+    baseline_hashes
     check_cron_spool
     comp_checks
     harden_mounts
