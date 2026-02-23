@@ -1398,6 +1398,8 @@ Write-BlueTeamLog "============================================================"
 try {
     # Enable firewall on all profiles
     Write-BlueTeamLog "Enabling Windows Firewall on all profiles..." "INFO"
+    # RDP - always
+    Set-InboundPortRule -Port 3389 -Label "RDP - Required Rule 10"
     Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True -DefaultInboundAction Block -DefaultOutboundAction Allow -ErrorAction SilentlyContinue
     Add-Change "Firewall" "Firewall Status" "Enabled" "All profiles with default deny inbound"
     Write-BlueTeamLog "Firewall enabled on all profiles" "SUCCESS"
@@ -1543,9 +1545,6 @@ function Set-InboundPortRule {
         Write-BlueTeamLog "Failed to create firewall rule for port ${Port}: $_" "ERROR"
     }
 }
-
-# RDP - always
-Set-InboundPortRule -Port 3389 -Label "RDP - Required Rule 10"
 
 # Service-specific ports
 foreach ($port in $SelectedService.Ports) {
