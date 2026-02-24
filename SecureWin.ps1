@@ -12,7 +12,7 @@
     
     1. $AuthorizedAdmins - Add your blue team usernames (I did this for you already!)
     
-    2. $SetAllUserPasswords - Change to YOUR secure password @(line 251)
+    2. $SetAllUserPasswords - Change to YOUR secure password @(line 258)
     
     3. $SafeIPAddresses - Verify scoring engine/jumpbox IPs (Should be done already as well!)
     
@@ -78,7 +78,7 @@ if ($Help) {
 ================================================================================
                     SecureWin.ps1 - Windows Hardening Script
                     CDT Team Charlie - Spring 2026
-                    Time to lock out the Red... For good :)
+                    Time to lock out Red... For good :)
 ================================================================================
 
 USAGE:
@@ -248,7 +248,21 @@ $AuthorizedAdmins = @(
 # IMPORTANT: This password must NOT contain 3+ consecutive characters from any authorized admin username.
 # Windows complexity policy will reject the password at user-creation time if it does.
 # For "blueadmin", avoid these substrings: blu, lue, uea, ead, adm, dmi, min
+
+
+
+
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 $SetAllUserPasswords = "<CHANGE-PASSWORD-HERE-BEFORE-RUNNING>" # DO NOT SHARE THIS PASSWORD WITH ANYONE!
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+
+
 
 # NETWORK SECURITY - CDT Competition Network
 # IP addresses that should NEVER be blocked (scoring engine, gray team, jumpboxes)
@@ -1398,8 +1412,6 @@ Write-BlueTeamLog "============================================================"
 try {
     # Enable firewall on all profiles
     Write-BlueTeamLog "Enabling Windows Firewall on all profiles..." "INFO"
-    # RDP - always
-    Set-InboundPortRule -Port 3389 -Label "RDP - Required Rule 10"
     Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True -DefaultInboundAction Block -DefaultOutboundAction Allow -ErrorAction SilentlyContinue
     Add-Change "Firewall" "Firewall Status" "Enabled" "All profiles with default deny inbound"
     Write-BlueTeamLog "Firewall enabled on all profiles" "SUCCESS"
@@ -1424,6 +1436,60 @@ try {
     Write-BlueTeamLog "Failed to configure firewall: $_" "ERROR"
 }
 
+# ---------------------------------------------------------------------------
+# FAIL-SAFE: KEEP RDP ALIVE BEFORE ANY INTERACTIVE PROMPTS
+# ---------------------------------------------------------------------------
+# If we remove inbound rules or set default deny BEFORE opening 3389, any RDP
+# session running this script will lock itself out mid-run (bricking access).
+# This emergency rule is created FIRST and is preserved because its DisplayName
+# begins with "Blue Team".
+function Ensure-BlueTeamRDPFailSafe {
+    param(
+        [string]$RuleName = "Blue Team - Allow RDP 3389 (Fail-Safe)",
+        [string]$RuleDesc = "Fail-safe RDP rule created before inbound rules are modified."
+    )
+
+    try {
+        $existing = Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue
+
+        $needsRecreate = $false
+        if ($existing) {
+            $pf = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $existing -ErrorAction SilentlyContinue
+            if (-not $pf -or $pf.Protocol -ne "TCP" -or $pf.LocalPort -ne "3389") {
+                $needsRecreate = $true
+            }
+        }
+
+        if ($existing -and $needsRecreate) {
+            Remove-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue | Out-Null
+            $existing = $null
+        }
+
+        if (-not $existing) {
+            New-NetFirewallRule `
+                -DisplayName $RuleName `
+                -Description $RuleDesc `
+                -Direction Inbound `
+                -Action Allow `
+                -Protocol TCP `
+                -LocalPort 3389 `
+                -Profile Any `
+                -Enabled True `
+                -EdgeTraversalPolicy Allow | Out-Null
+
+            Write-BlueTeamLog "Created RDP fail-safe firewall rule (3389) BEFORE removing inbound rules" "SUCCESS"
+            Add-Change "Firewall" "RDP Fail-Safe" "Created" $RuleName
+        } else {
+            Set-NetFirewallRule -DisplayName $RuleName -Enabled True -Action Allow -Direction Inbound -Profile Any | Out-Null
+            Write-BlueTeamLog "Verified RDP fail-safe firewall rule is enabled (3389)" "INFO"
+        }
+    } catch {
+        Write-BlueTeamLog "WARNING: Could not create/verify RDP fail-safe rule. You may lose RDP access! Error: $_" "WARNING"
+    }
+}
+
+# Create/verify the fail-safe rule immediately (before any rule deletion or prompts)
+Ensure-BlueTeamRDPFailSafe
 # Remove all existing inbound rules (except safe ones)
 if ($BlockAllInboundByDefault) {
     Write-BlueTeamLog "" "INFO"
@@ -1452,7 +1518,7 @@ if ($BlockAllInboundByDefault) {
     Write-BlueTeamLog "Removed $removedRulesCount potentially malicious firewall rules" "SUCCESS"
 }
 
-# ── SERVICE-SPECIFIC FIREWALL RULES ─────────────────────────────────────────
+# SERVICE-SPECIFIC FIREWALL RULES:
 # Ask the operator which scored Windows service is on this host so we only open
 # the ports that are actually needed. Opening every service port on every host
 # is unnecessary attack surface. RDP (3389) is always opened per Rule 10.
@@ -1545,6 +1611,9 @@ function Set-InboundPortRule {
         Write-BlueTeamLog "Failed to create firewall rule for port ${Port}: $_" "ERROR"
     }
 }
+
+# RDP - always
+Set-InboundPortRule -Port 3389 -Label "RDP - Required Rule 10"
 
 # Service-specific ports
 foreach ($port in $SelectedService.Ports) {
