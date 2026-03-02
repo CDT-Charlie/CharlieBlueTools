@@ -335,12 +335,12 @@ if ($RunningIndividualPhase) {
 }
 
 # PASSWORD POLICY
-$MinPasswordLength = 16                  # Minimum password length
-$MaxPasswordAge = 90                     # Maximum password age in days
+$MinPasswordLength = 5                  # Minimum password length
+$MaxPasswordAge = 100                     # Maximum password age in days
 $MinPasswordAge = 1                      # Minimum password age in days
-$PasswordHistoryCount = 24               # Passwords to remember
-$AccountLockoutThreshold = 3             # Failed attempts before lockout
-$AccountLockoutDuration = 30             # Lockout duration in minutes
+$PasswordHistoryCount = 0               # Passwords to remember
+$AccountLockoutThreshold = 5             # Failed attempts before lockout
+$AccountLockoutDuration = 60             # Lockout duration in minutes
 
 # SYSTEM HARDENING
 $DisableSMBv1 = $true                    # Disable SMBv1 (critical!)
@@ -459,7 +459,7 @@ Write-BlueTeamLog "============================================================"
 $configWarnings = @()
 
 # Check if default password was changed
-if ($SetAllUserPasswords -eq "FriendshipIsMagic0!") {
+if ($SetAllUserPasswords -eq "Friendship0!") {
     $configWarnings += "Default password detected - you should change `$SetAllUserPasswords to your team password!"
 }
 
@@ -469,8 +469,8 @@ if ($AuthorizedAdmins -contains "blueadmin" -and $AuthorizedAdmins.Count -eq 3) 
 }
 
 # Validate password meets basic complexity
-if ($SetAllUserPasswords.Length -lt 8) {
-    $configWarnings += "Password is too short (minimum 8 characters required)"
+if ($SetAllUserPasswords.Length -lt 5) {
+    $configWarnings += "Password is too short (minimum 5 characters required)"
 }
 
 if ($SetAllUserPasswords -match '#') {
