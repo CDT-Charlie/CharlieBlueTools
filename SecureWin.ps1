@@ -371,6 +371,21 @@ $RemovedItems = @()
 $hostname = $env:COMPUTERNAME.ToLower()
 Write-Host "Detected hostname: $hostname" -ForegroundColor Cyan
 
+# Detect if this machine is a Domain Controller
+# On a DC, local SAM accounts are inactive - all admin users must be created as AD domain accounts
+$IsDomainController = $false
+try {
+    $osInfo = Get-WmiObject -Class Win32_ComputerSystem -ErrorAction SilentlyContinue
+    if ($osInfo -and ($osInfo.DomainRole -eq 4 -or $osInfo.DomainRole -eq 5)) {
+        # DomainRole: 4 = Backup Domain Controller, 5 = Primary Domain Controller
+        $IsDomainController = $true
+        $DomainName = $osInfo.Domain
+        Write-Host "DOMAIN CONTROLLER DETECTED: $DomainName - admin users will be created as AD domain accounts" -ForegroundColor Magenta
+    }
+} catch {
+    Write-Host "WARNING: Could not determine domain role, assuming non-DC: $_" -ForegroundColor Yellow
+}
+
 # Track script runs
 $runCounterPath = "C:\BlueTeam\script-run-counter.txt"
 $runCounterDir = Split-Path -Path $runCounterPath -Parent
@@ -994,114 +1009,261 @@ Write-BlueTeamLog "" "INFO"
 
 # ============================================================================
 # 1.6 - CREATE/CONFIGURE AUTHORIZED ADMIN USERS
-
+# NOTE: On a Domain Controller, local SAM accounts cannot log in via RDP and
+#       are not domain accounts. We detect DCs and use AD cmdlets instead.
 # ============================================================================
 Write-BlueTeamLog "Step 1.6: Configuring authorized admin users..." "INFO"
 
-foreach ($adminUser in $AuthorizedAdmins) {
-    try {
-        # Check if user exists
-        $userExists = Get-LocalUser -Name $adminUser -ErrorAction SilentlyContinue
-        
-        if (-not $userExists) {
-            # Create the user
-            Write-BlueTeamLog "Creating new admin user: $adminUser" "INFO"
+if ($IsDomainController) {
+    # -------------------------------------------------------------------------
+    # DC PATH: Create/configure users as AD domain accounts
+    # -------------------------------------------------------------------------
+    Write-BlueTeamLog "Running on Domain Controller - using Active Directory cmdlets for admin user setup" "WARNING"
 
-            # Windows complexity policy rejects passwords that contain 3+ consecutive characters
-            # from the account name being created. Pre-check here so we can use a safe interim
-            # password instead of silently failing with InvalidPasswordException.
-            $passwordToUse = $SetAllUserPasswords
-            $usernameSubstringFound = $false
-            if ($adminUser.Length -ge 3) {
-                for ($si = 0; $si -le $adminUser.Length - 3; $si++) {
-                    $chunk = $adminUser.Substring($si, 3).ToLower()
-                    if ($passwordToUse.ToLower().Contains($chunk)) {
-                        $usernameSubstringFound = $true
-                        Write-BlueTeamLog "WARNING: Team password contains '$chunk' (substring of '$adminUser') - Windows will reject it for this account." "WARNING"
-                        Write-BlueTeamLog "Using a safe interim password for account creation. You should update `$SetAllUserPasswords to avoid substrings of all admin usernames." "WARNING"
-                        # Use an interim password that avoids the username substring.
-                        # Built by replacing the conflicting section; guaranteed to meet complexity.
-                        $passwordToUse = "TmpCreate@" + (Get-Date -Format "HHmmss") + "Z!"
-                        break
+    # Ensure the ActiveDirectory module is available (comes with RSAT / AD DS role)
+    if (-not (Get-Module -ListAvailable -Name ActiveDirectory)) {
+        Write-BlueTeamLog "CRITICAL: ActiveDirectory PowerShell module not found. Cannot create domain admin users. Install RSAT AD DS tools." "ERROR"
+    } else {
+        Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+
+        # Resolve the AD domain object to get the DN and NetBIOS name
+        try {
+            $adDomain      = Get-ADDomain -ErrorAction Stop
+            $domainDN      = $adDomain.DistinguishedName       # e.g. DC=mlp,DC=local
+            $netbiosName   = $adDomain.NetBIOSName             # e.g. MLP
+            $userContainer = "CN=Users,$domainDN"
+        } catch {
+            Write-BlueTeamLog "Failed to query AD domain: $_" "ERROR"
+            $adDomain = $null
+        }
+
+        if ($adDomain) {
+            foreach ($adminUser in $AuthorizedAdmins) {
+                try {
+                    # ---- 1. Create the AD user if it does not already exist ----
+                    $adUser = Get-ADUser -Filter { SamAccountName -eq $adminUser } -ErrorAction SilentlyContinue
+
+                    # Build the secure password (same substring-safety logic as the local path)
+                    $passwordToUse = $SetAllUserPasswords
+                    $usernameSubstringFound = $false
+                    if ($adminUser.Length -ge 3) {
+                        for ($si = 0; $si -le $adminUser.Length - 3; $si++) {
+                            $chunk = $adminUser.Substring($si, 3).ToLower()
+                            if ($passwordToUse.ToLower().Contains($chunk)) {
+                                $usernameSubstringFound = $true
+                                Write-BlueTeamLog "WARNING: Team password contains '$chunk' (substring of '$adminUser') - using interim password for account creation." "WARNING"
+                                $passwordToUse = "TmpCreate@" + (Get-Date -Format "HHmmss") + "Z!"
+                                break
+                            }
+                        }
                     }
-                }
-            }
+                    $SecurePassword = ConvertTo-SecureString $passwordToUse -AsPlainText -Force
 
-            $SecurePassword = ConvertTo-SecureString $passwordToUse -AsPlainText -Force
-            $userCreated = $false
-            try {
-                New-LocalUser -Name $adminUser -Password $SecurePassword -FullName "Blue Team Admin" -Description "Authorized Blue Team Administrator" -PasswordNeverExpires:$true -ErrorAction Stop
-                $userCreated = $true
-                Add-Change "User Management" "Created User" $adminUser "New authorized admin user"
-                Write-BlueTeamLog "Successfully created user: $adminUser" "SUCCESS"
+                    if (-not $adUser) {
+                        Write-BlueTeamLog "Creating AD domain user: $adminUser" "INFO"
+                        New-ADUser `
+                            -SamAccountName        $adminUser `
+                            -Name                  $adminUser `
+                            -GivenName             "Blue" `
+                            -Surname               "Admin" `
+                            -DisplayName           "Blue Team Admin" `
+                            -Description           "Authorized Blue Team Administrator" `
+                            -AccountPassword       $SecurePassword `
+                            -Enabled               $true `
+                            -PasswordNeverExpires   $true `
+                            -CannotChangePassword   $false `
+                            -Path                  $userContainer `
+                            -ErrorAction           Stop
 
-                # If we used an interim password, immediately update to the real team password
-                # now that the account exists (Set-LocalUser is not subject to the same
-                # name-in-password restriction as New-LocalUser on account creation).
-                if ($usernameSubstringFound) {
+                        $adUser = Get-ADUser -Filter { SamAccountName -eq $adminUser } -ErrorAction Stop
+                        Add-Change "User Management" "Created AD User" $adminUser "New authorized AD domain admin user"
+                        Write-BlueTeamLog "Successfully created AD user: $adminUser" "SUCCESS"
+
+                        # If interim password was used, update to real password now
+                        if ($usernameSubstringFound) {
+                            try {
+                                $RealPassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
+                                Set-ADAccountPassword -Identity $adminUser -NewPassword $RealPassword -Reset -ErrorAction Stop
+                                Write-BlueTeamLog "Real team password applied to AD user $adminUser after creation" "SUCCESS"
+                            } catch {
+                                Write-BlueTeamLog "Could not apply real team password to AD user $adminUser (interim password is active): $_" "WARNING"
+                            }
+                        }
+                    } else {
+                        Write-BlueTeamLog "AD user $adminUser already exists - ensuring account is enabled and password is current" "INFO"
+                        try {
+                            Enable-ADAccount -Identity $adminUser -ErrorAction Stop
+                            Set-ADAccountPassword -Identity $adminUser -NewPassword $SecurePassword -Reset -ErrorAction Stop
+                            Write-BlueTeamLog "AD user $adminUser enabled and password refreshed" "SUCCESS"
+                        } catch {
+                            Write-BlueTeamLog "Could not update AD user $adminUser : $_" "WARNING"
+                        }
+                    }
+
+                    # ---- 2. Add to Domain Users (primary group - usually automatic) ----
+                    # Domain Users is the default primary group; log it for confirmation.
+                    Write-BlueTeamLog "AD user $adminUser is a member of Domain Users (default primary group)" "INFO"
+
+                    # ---- 3. Add to Domain Admins ----
                     try {
-                        $RealPassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
-                        Set-LocalUser -Name $adminUser -Password $RealPassword -ErrorAction Stop
-                        Write-BlueTeamLog "Real team password applied to $adminUser after creation" "SUCCESS"
+                        Add-ADGroupMember -Identity "Domain Admins" -Members $adminUser -ErrorAction Stop
+                        Write-BlueTeamLog "Added $adminUser to Domain Admins" "SUCCESS"
+                        Add-Change "User Management" "Domain Admin Rights" $adminUser "Added to Domain Admins group"
                     } catch {
-                        Write-BlueTeamLog "Could not apply real team password to $adminUser after creation (interim password is active): $_" "WARNING"
+                        if ($_.Exception.Message -like "*already a member*") {
+                            Write-BlueTeamLog "$adminUser is already a member of Domain Admins" "INFO"
+                        } else {
+                            Write-BlueTeamLog "Failed to add $adminUser to Domain Admins: $_" "WARNING"
+                        }
+                    }
+
+                    # ---- 4. Add to built-in Administrators (grants local admin on DC) ----
+                    try {
+                        Add-ADGroupMember -Identity "Administrators" -Members $adminUser -ErrorAction Stop
+                        Write-BlueTeamLog "Added $adminUser to Administrators (built-in)" "SUCCESS"
+                        Add-Change "User Management" "Admin Rights (DC)" $adminUser "Added to built-in Administrators group"
+                    } catch {
+                        if ($_.Exception.Message -like "*already a member*") {
+                            Write-BlueTeamLog "$adminUser is already a member of Administrators" "INFO"
+                        } else {
+                            Write-BlueTeamLog "Failed to add $adminUser to Administrators: $_" "WARNING"
+                        }
+                    }
+
+                    # ---- 5. Ensure the account is enabled (idempotent) ----
+                    try {
+                        Enable-ADAccount -Identity $adminUser -ErrorAction Stop
+                        Write-BlueTeamLog "AD account $adminUser is enabled" "SUCCESS"
+                    } catch {
+                        Write-BlueTeamLog "AD account $adminUser enable step: $_" "INFO"
+                    }
+
+                    # ---- 6. RDP on a DC ----
+                    # On a DC, members of Domain Admins / Administrators can RDP by default.
+                    # The "Remote Desktop Users" group also works; add there for belt-and-suspenders.
+                    try {
+                        Add-ADGroupMember -Identity "Remote Desktop Users" -Members $adminUser -ErrorAction SilentlyContinue
+                        Write-BlueTeamLog "Added $adminUser to Remote Desktop Users (domain group)" "SUCCESS"
+                    } catch {
+                        # Non-fatal - Domain Admins already have RDP rights on a DC
+                    }
+
+                } catch {
+                    Write-BlueTeamLog "Failed to configure AD admin user $adminUser : $_" "ERROR"
+                }
+            } # end foreach $adminUser
+        } # end if $adDomain
+    } # end if AD module available
+
+} else {
+    # -------------------------------------------------------------------------
+    # NON-DC PATH: Original local user creation logic (unchanged)
+    # -------------------------------------------------------------------------
+    foreach ($adminUser in $AuthorizedAdmins) {
+        try {
+            # Check if user exists
+            $userExists = Get-LocalUser -Name $adminUser -ErrorAction SilentlyContinue
+            
+            if (-not $userExists) {
+                # Create the user
+                Write-BlueTeamLog "Creating new admin user: $adminUser" "INFO"
+
+                # Windows complexity policy rejects passwords that contain 3+ consecutive characters
+                # from the account name being created. Pre-check here so we can use a safe interim
+                # password instead of silently failing with InvalidPasswordException.
+                $passwordToUse = $SetAllUserPasswords
+                $usernameSubstringFound = $false
+                if ($adminUser.Length -ge 3) {
+                    for ($si = 0; $si -le $adminUser.Length - 3; $si++) {
+                        $chunk = $adminUser.Substring($si, 3).ToLower()
+                        if ($passwordToUse.ToLower().Contains($chunk)) {
+                            $usernameSubstringFound = $true
+                            Write-BlueTeamLog "WARNING: Team password contains '$chunk' (substring of '$adminUser') - Windows will reject it for this account." "WARNING"
+                            Write-BlueTeamLog "Using a safe interim password for account creation. You should update `$SetAllUserPasswords to avoid substrings of all admin usernames." "WARNING"
+                            # Use an interim password that avoids the username substring.
+                            # Built by replacing the conflicting section; guaranteed to meet complexity.
+                            $passwordToUse = "TmpCreate@" + (Get-Date -Format "HHmmss") + "Z!"
+                            break
+                        }
+                    }
+                }
+
+                $SecurePassword = ConvertTo-SecureString $passwordToUse -AsPlainText -Force
+                $userCreated = $false
+                try {
+                    New-LocalUser -Name $adminUser -Password $SecurePassword -FullName "Blue Team Admin" -Description "Authorized Blue Team Administrator" -PasswordNeverExpires:$true -ErrorAction Stop
+                    $userCreated = $true
+                    Add-Change "User Management" "Created User" $adminUser "New authorized admin user"
+                    Write-BlueTeamLog "Successfully created user: $adminUser" "SUCCESS"
+
+                    # If we used an interim password, immediately update to the real team password
+                    # now that the account exists (Set-LocalUser is not subject to the same
+                    # name-in-password restriction as New-LocalUser on account creation).
+                    if ($usernameSubstringFound) {
+                        try {
+                            $RealPassword = ConvertTo-SecureString $SetAllUserPasswords -AsPlainText -Force
+                            Set-LocalUser -Name $adminUser -Password $RealPassword -ErrorAction Stop
+                            Write-BlueTeamLog "Real team password applied to $adminUser after creation" "SUCCESS"
+                        } catch {
+                            Write-BlueTeamLog "Could not apply real team password to $adminUser after creation (interim password is active): $_" "WARNING"
+                        }
+                    }
+                } catch {
+                    Write-BlueTeamLog "Failed to create user $adminUser : $_" "ERROR"
+                }
+                if (-not $userCreated) {
+                    Write-BlueTeamLog "Skipping group configuration for $adminUser because user creation failed" "WARNING"
+                    continue
+                }
+            } else {
+                Write-BlueTeamLog "User $adminUser already exists" "INFO"
+            }
+            
+            # Ensure user is in Administrators group (idempotent operation)
+            $isMember = Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$adminUser" }
+            
+            if (-not $isMember) {
+                try {
+                    Add-LocalGroupMember -Group "Administrators" -Member $adminUser -ErrorAction Stop
+                    Write-BlueTeamLog "Added $adminUser to Administrators group" "SUCCESS"
+                    Add-Change "User Management" "Admin Rights" $adminUser "Added to Administrators group"
+                } catch {
+                    if ($_.Exception.Message -like "*already a member*") {
+                        Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
+                    } else {
+                        Write-BlueTeamLog "Failed to add $adminUser to Administrators: $_" "WARNING"
+                    }
+                }
+            } else {
+                Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
+            }
+            
+            # Ensure user is in Remote Desktop Users group for competition access
+            try {
+                $rdpGroup = Get-LocalGroup -Name "Remote Desktop Users" -ErrorAction SilentlyContinue
+                if ($rdpGroup) {
+                    $isRDPMember = Get-LocalGroupMember -Group "Remote Desktop Users" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$adminUser" }
+                    if (-not $isRDPMember) {
+                        Add-LocalGroupMember -Group "Remote Desktop Users" -Member $adminUser -ErrorAction SilentlyContinue
+                        Write-BlueTeamLog "Added $adminUser to Remote Desktop Users group" "SUCCESS"
                     }
                 }
             } catch {
-                Write-BlueTeamLog "Failed to create user $adminUser : $_" "ERROR"
+                # Non-critical, continue
             }
-            if (-not $userCreated) {
-                Write-BlueTeamLog "Skipping group configuration for $adminUser because user creation failed" "WARNING"
-                continue
-            }
-        } else {
-            Write-BlueTeamLog "User $adminUser already exists" "INFO"
-        }
-        
-        # Ensure user is in Administrators group (idempotent operation)
-        $isMember = Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$adminUser" }
-        
-        if (-not $isMember) {
+            
+            # Enable the user account (idempotent)
             try {
-                Add-LocalGroupMember -Group "Administrators" -Member $adminUser -ErrorAction Stop
-                Write-BlueTeamLog "Added $adminUser to Administrators group" "SUCCESS"
-                Add-Change "User Management" "Admin Rights" $adminUser "Added to Administrators group"
+                Enable-LocalUser -Name $adminUser -ErrorAction Stop
             } catch {
-                if ($_.Exception.Message -like "*already a member*") {
-                    Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
-                } else {
-                    Write-BlueTeamLog "Failed to add $adminUser to Administrators: $_" "WARNING"
-                }
+                Write-BlueTeamLog "User $adminUser is already enabled" "INFO"
             }
-        } else {
-            Write-BlueTeamLog "User $adminUser already in Administrators group" "INFO"
-        }
-        
-        # Ensure user is in Remote Desktop Users group for competition access
-        try {
-            $rdpGroup = Get-LocalGroup -Name "Remote Desktop Users" -ErrorAction SilentlyContinue
-            if ($rdpGroup) {
-                $isRDPMember = Get-LocalGroupMember -Group "Remote Desktop Users" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$adminUser" }
-                if (-not $isRDPMember) {
-                    Add-LocalGroupMember -Group "Remote Desktop Users" -Member $adminUser -ErrorAction SilentlyContinue
-                    Write-BlueTeamLog "Added $adminUser to Remote Desktop Users group" "SUCCESS"
-                }
-            }
+            
         } catch {
-            # Non-critical, continue
+            Write-BlueTeamLog "Failed to configure admin user $adminUser : $_" "ERROR"
         }
-        
-        # Enable the user account (idempotent)
-        try {
-            Enable-LocalUser -Name $adminUser -ErrorAction Stop
-        } catch {
-            Write-BlueTeamLog "User $adminUser is already enabled" "INFO"
-        }
-        
-    } catch {
-        Write-BlueTeamLog "Failed to configure admin user $adminUser : $_" "ERROR"
     }
-}
+} # end non-DC path
 
 Write-BlueTeamLog "" "INFO"
 
